@@ -33,6 +33,18 @@ different global SSH identity on the machine doesn't matter.
 | `post_saver_embed` | Public | Built embed sandbox only (pushed by CI); Pages → `embed.<domain>` |
 | `post_saver_ops` | Private | Backups and admin jobs |
 
+## Firebase projects
+
+| Alias | Project | Notes |
+|---|---|---|
+| `dev` | `post-saver-dev` | Local development and emulators |
+| `prod` | `post-saver-prod` | Live site; Hosting serves only the auth subdomain (`/__/auth/*`) |
+
+Both use Firestore `(default)` in `nam5`. The auto-created browser API key in each project is
+restricted to: Identity Toolkit, Token Service, Cloud Firestore, Firebase Installations and
+App Check. If a new Firebase feature fails with `API_KEY_SERVICE_BLOCKED`, add its API to the
+key under Google Cloud → APIs & Services → Credentials.
+
 ## Secrets (never committed)
 
 | Secret | Where | Set by |
