@@ -1,0 +1,76 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  # Main site → GitHub Pages of this repo (custom domain = site.domain).
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check:domains
+      - run: pnpm --filter @postsaver/web build
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: apps/web/dist
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  # Embed sandbox → pushed to the separate embed repo (its own origin, embed.<domain>).
+  embed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @postsaver/embed build
+      - name: Publish to embed repo
+        env:
+          EMBED_DEPLOY_KEY: ${{ secrets.EMBED_DEPLOY_KEY }}
+        run: |
+          set -euo pipefail
+          owner=$(pnpm exec tsx scripts/config-get.ts github.owner)
+          repo=$(pnpm exec tsx scripts/config-get.ts github.repos.embed)
+          mkdir -p ~/.ssh
+          umask 077
+          printf '%s\n' "$EMBED_DEPLOY_KEY" > ~/.ssh/embed_key
+          # Trust GitHub's published SSH host keys (fetched over HTTPS).
+          curl -fsSL https://api.github.com/meta | jq -r '.ssh_keys[] | "github.com " + .' > ~/.ssh/known_hosts
+          cd apps/embed/dist
+          git init -q -b main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Deploy ${GITHUB_SHA::7}"
+          GIT_SSH_COMMAND="ssh -i ~/.ssh/embed_key -o IdentitiesOnly=yes" \
+            git push -f "git@github.com:${owner}/${repo}.git" main

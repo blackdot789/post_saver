@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="444 268 450 427" role="img" aria-label="logo">
+  <defs>
+    <linearGradient id="ps-fill" gradientUnits="userSpaceOnUse" x1="454" y1="278" x2="746" y2="540">
+      <stop offset="0" stop-color="#099AFE"/>
+      <stop offset="0.45" stop-color="#1469F9"/>
+      <stop offset="0.75" stop-color="#4B3CEF"/>
+      <stop offset="0.9" stop-color="#6636F2"/>
+      <stop offset="1" stop-color="#6A30F4"/>
+    </linearGradient>
+    <linearGradient id="ps-fold" gradientUnits="userSpaceOnUse" x1="530" y1="565" x2="590" y2="622">
+      <stop offset="0" stop-color="#0B1FA8" stop-opacity="0.5"/>
+      <stop offset="0.5" stop-color="#2A17C4" stop-opacity="0.2"/>
+      <stop offset="1" stop-color="#5A1AF0" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="ps-clip">
+      <path d="M526 278H645A145 145 0 0 1 645 568H565V629A55.5 55.5 0 0 1 454 629V350A72 72 0 0 1 526 278Z"/>
+    </clipPath>
+  </defs>
+  <path fill="url(#ps-fill)" fill-rule="evenodd" d="M526 278H645A145 145 0 0 1 645 568H565V629A55.5 55.5 0 0 1 454 629V350A72 72 0 0 1 526 278ZM567 365H666A14 14 0 0 1 680 379V509L617 472L553 509V379A14 14 0 0 1 567 365Z"/>
+  <path clip-path="url(#ps-clip)" fill="url(#ps-fold)" d="M454 648C492 600 560 530 617 472L680 509V700H454Z"/>
+  <g stroke="#0B94FD" stroke-width="25" stroke-linecap="round" fill="none">
+    <path d="M809 345L836 322"/>
+    <path d="M831 403H872"/>
+    <path d="M819 463L847 484"/>
+  </g>
+</svg>

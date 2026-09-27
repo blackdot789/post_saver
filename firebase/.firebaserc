@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "post-saver-dev",
+    "dev": "post-saver-dev",
+    "prod": "post-saver-prod"
+  }
+}

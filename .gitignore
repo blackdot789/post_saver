@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.env.local
+.env.*.local
+# Firebase emulator data & debug logs
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+# Wrangler
+.wrangler/
+.dev.vars
+# Never commit keys
+*.pem
+*_key
+*_key.pub
+
+# Generated from site.config.ts at build time
+apps/*/src/generated/
