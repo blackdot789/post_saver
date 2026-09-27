@@ -18,8 +18,8 @@ export const site = {
   domain: "kerdostack.com",
   subdomains: { www: "www", embed: "embed", auth: "auth" },
 
-  /** Resolver Worker base URL (no trailing slash). Filled in after the first Worker deploy. */
-  apiBaseUrl: "",
+  /** Resolver Worker base URL (no trailing slash). Can move to https://api.<domain> later. */
+  apiBaseUrl: "https://post-saver-resolver.postsaver-resolver.workers.dev",
 
   contact: {
     support: "kerdostack@gmail.com",
