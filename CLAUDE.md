@@ -13,10 +13,11 @@ This file is the **single source of truth for the whole project**: product, deci
 - **What:** a web app (PWA) that collects **links** to posts saved from every social platform into one synced library, on phone and desktop. Posts are displayed only through the platforms' **official embeds**; no media is copied.
 - **Why:** the owner tried Dewey (getdewey.co). Saves and unsaves made in the Instagram *phone app* never reached Dewey, because Dewey depends on a desktop Chrome extension noticing changes, and Instagram has no API or notifications for saved posts. We beat that by making every capture path write straight to the cloud, especially **Share → the app** on the phone.
 - **Cost:** must stay **$0 to run**: GitHub Pages (public repos) + Firebase **Spark** (Auth + Firestore, used directly from the browser, no Cloud Functions) + one Cloudflare Worker (free plan).
-- **Status (2026-09-27):**
+- **Status (2026-09-29):**
   - **Phase 0 (foundations) is done.** The coming-soon landing is live at `https://<domain>`, the embed sandbox at `https://embed.<domain>`, and the Worker skeleton is live. CI and deploy are green.
   - `auth.<domain>` also serves the Firebase auth helpers over HTTPS.
-  - **Next: Phase 1, step 1, the URL engine** (§6.2, §9).
+  - **Phase 1, step 1 (the URL engine, `packages/core`) is done:** 571 Vitest tests pass locally and run in CI.
+  - **Next: Phase 1, step 2: Firestore schema, rules and the rules test suite** (§6.4, §9).
 - **The original plan file**, `~/.claude/plans/make-a-full-proof-vivid-rose.md`, exists only on the owner's Mac and is superseded by this file.
 
 ## 1. Working with the owner
@@ -63,9 +64,11 @@ pnpm install
 pnpm dev                                   # web app at http://localhost:5173
 pnpm --filter @postsaver/embed dev         # embed sandbox at http://localhost:5174
 pnpm build                                 # web + embed production builds
-pnpm verify                                # what CI runs: check:domains + typecheck + build
+pnpm verify                                # what CI runs: check:domains + typecheck + test + build
 pnpm check:domains                         # fail if domain/brand is hardcoded outside site.config.ts
 pnpm typecheck                             # all packages + scripts/
+pnpm test                                  # Vitest in every package that has a `test` script (packages/core)
+pnpm --filter @postsaver/core exec vitest  # URL engine tests in watch mode
 pnpm brand                                 # regenerate icons + OG image from brand/ (outputs committed)
 pnpm exec tsx scripts/config-get.ts hosts.embed   # print one config value (CI uses this)
 pnpm domain:apply                          # set both GitHub Pages custom domains, then enforce HTTPS
@@ -76,7 +79,7 @@ cd firebase && firebase deploy --only hosting --project prod     # auth-subdomai
 cd firebase && firebase emulators:start    # Auth 9099, Firestore 8080, UI 4000 (Java 21 installed)
 ```
 
-There is **no test runner or linter yet**. Phase 1 adds Vitest (unit), `@firebase/rules-unit-testing` (rules), Playwright (e2e against the emulators) and ESLint/Prettier.
+**Vitest 5** runs the unit tests (`packages/core/test`). There is **no linter yet**. Phase 1 still adds `@firebase/rules-unit-testing` (rules), Playwright (e2e against the emulators) and ESLint/Prettier.
 
 **pnpm 12 quirks:**
 - There is no `-s` flag.
@@ -91,6 +94,7 @@ There is **no test runner or linter yet**. Phase 1 adds Vitest (unit), `@firebas
 ```
 site.config.ts        the ONLY place for domain, brand, contacts, GitHub repos, Worker URL, Firebase web configs
 packages/config/      typed access: index.ts (hosts/origins/firebaseConfig), html.ts (%TOKENS%, CSP), vite-plugin.ts
+packages/core/        URL engine: parse(), extractSharedUrl()/findUrls(), saveId(); fixture tests (Vitest)
 apps/web/             main site (static landing index.html + 404.html now; React /app/ etc. in Phase 1)
 apps/embed/           embed sandbox (placeholder: answers the parent via postMessage)
 workers/resolver/     Cloudflare Worker (Phase 0: /health + config-driven CORS)
@@ -126,7 +130,7 @@ docs/                 SETUP.md (accounts/tools/secrets), DOMAIN_CHANGE.md (runbo
 | `embed` | `apps/embed` | Force-pushed as the only commit to `post_saver_embed@main` (branch-deployed Pages, root) | `production` environment, secret **`EMBED_DEPLOY_KEY`** (SSH deploy key with write access on the embed repo) |
 | `resolver` | `workers/resolver` | `wrangler deploy` (account id in `wrangler.jsonc`) | `production` environment, secret **`CLOUDFLARE_API_TOKEN`** (skipped with a warning if missing) |
 
-`ci.yml` runs on PRs and pushes: `pnpm install --frozen-lockfile`, `check:domains`, `typecheck`, `build`.
+`ci.yml` runs on PRs and pushes: `pnpm install --frozen-lockfile`, `check:domains`, `typecheck`, `test`, `build`.
 
 ### 4.3 Structural rules
 - **Multi-page build, no SPA fallback.** GitHub Pages can't rewrite routes, so **every route is its own HTML entry** in `apps/web/vite.config.ts` → `build.rollupOptions.input`. Internal links are relative, with trailing slashes (`/save/`). State inside `/app/` goes in query params.
@@ -141,14 +145,14 @@ docs/                 SETUP.md (accounts/tools/secrets), DOMAIN_CHANGE.md (runbo
 
 ### 4.4 Complete code map (every tracked file)
 
-Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver/web`, `@postsaver/embed`, `@postsaver/resolver`. Every workspace dependency is `workspace:*`. Packages export **TypeScript source directly**: there is no build step for `packages/*`, and consumers (Vite, tsx, wrangler) compile it.
+Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver/core`, `@postsaver/web`, `@postsaver/embed`, `@postsaver/resolver`. Every workspace dependency is `workspace:*`. Packages export **TypeScript source directly**: there is no build step for `packages/*`, and consumers (Vite, tsx, wrangler) compile it.
 
 **Root**
 
 | File | Purpose / key contents |
 |---|---|
 | `site.config.ts` | `export const site = {…} as const` + `interface FirebaseWebConfig`. Fields: `brand{name, shortName, tagline, description, colors{from,to,ink}}`, `domain`, `subdomains{www,embed,auth}`, `apiBaseUrl`, `contact{support,privacy}`, `github{owner, repos{web,embed,ops}}`, `firebase{dev,prod}` (apiKey, projectId, appId, messagingSenderId) |
-| `package.json` | `packageManager: pnpm@12.6.0`, `engines.node >=22.18`. Scripts: `dev`, `build`, `typecheck`, `check:domains`, `brand`, `config:get`, `domain:apply`, `verify`. devDeps: typescript ^7.0.2, tsx ^4.23, sharp ^0.35.4, @types/node ^26, `@postsaver/config` |
+| `package.json` | `packageManager: pnpm@12.6.0`, `engines.node >=22.18`. Scripts: `dev`, `build`, `typecheck`, `test` (`pnpm -r run test`), `check:domains`, `brand`, `config:get`, `domain:apply`, `verify`. devDeps: typescript ^7.0.2, tsx ^4.23, sharp ^0.35.4, @types/node ^26, `@postsaver/config` |
 | `pnpm-workspace.yaml` | `packages: apps/*, packages/*, workers/*`; `allowBuilds: {esbuild: true, workerd: true}` |
 | `tsconfig.base.json` | ES2022, `moduleResolution: Bundler`, `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, `allowImportingTsExtensions`, `noEmit`. Every package's `tsconfig.json` extends it |
 | `.nvmrc` | `24` (CI reads it) |
@@ -165,6 +169,22 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 | `src/index.ts` | `site`, `type FirebaseWebConfig`, `type HostKey` (`"app" \| "www" \| "embed" \| "auth"`), `host(key)`, `origin(key)`, `hosts`, `origins`, `type FirebaseEnv`, `firebaseConfig(env)` (adds `authDomain`), `forbiddenLiterals()` (returns `[domain, brand.name]`) |
 | `src/html.ts` | `htmlTokens()` (token → value map; HTML-escaped on apply), `applyHtmlTokens(html, tokens?)` (replaces `%[A-Z_]+%`, throws on unknown), `mainSiteCsp()` (a directive map: `default/script/style/font/connect-src 'self'`, `img-src 'self' data:`, `frame-src <embed origin>`, `object-src 'none'`, `base-uri`/`form-action 'self'`) |
 | `src/vite-plugin.ts` | `siteConfigPlugin({ csp?, brandCssPath?, files? })`. It uses `configResolved` (writes brand.css only when changed), `transformIndexHtml` (order `pre`, tokens + CSP meta when `!ctx.server`) and `generateBundle` (emits `files()` as assets) |
+
+**`packages/core/`**: the URL engine (§6.2). Pure TypeScript with no network access; runs in the browser, the Worker and Node. Exports map: `"."` → `src/index.ts`. Scripts: `typecheck`, `test` (`vitest run`). devDeps: vitest ^5.0.2.
+
+| File | Purpose |
+|---|---|
+| `src/index.ts` | Public API: `parse`, `extractSharedUrl`, `findUrls`, `saveId`, `sha256Hex`, `parseStart`, `GENERIC_SHORTENERS`, `MAX_URL_LENGTH` (2048), `PLATFORMS`, `KINDS`, and the types |
+| `src/types.ts` | `Platform` (the 10 platforms + `"web"`), `Kind` (post, reel, video, short, live, photo, pin, comment, story, profile, community, playlist, article, link), `ResolveVia` (`"redirect"` \| `"bsky-handle"`), `Embed` (one descriptor per platform, ids only), `ParsedLink` |
+| `src/url.ts` | `toUrl(input)`: trims, removes invisible characters and `<…>`/quote wrappers, decodes a fully encoded URL, converts `intent://` and `at://`, adds `https://`, refuses other schemes and hosts without a dot, drops credentials. `bareHost`. `cleanUrl`: drops tracking params (**the other params keep their exact encoding**) and the fragment unless it's `#/…` or `#!…`. `unwrapRedirect`: l.facebook / l.instagram / l.threads, Google `/url` + AMP, YouTube `/redirect` + `attribution_link`, out.reddit, LinkedIn `/redir`, Facebook plugin/sharer URLs |
+| `src/match.ts` | `Ctx` (URL, bare host, decoded path segments, query), `Match`, `Matcher`, and the helpers `linkCard`, `profile`, `shortLink` |
+| `src/platforms/*.ts` | One matcher per platform. Returns null for hosts it doesn't own. Otherwise returns one of: a post (id checked by a strict regex, canonical URL rebuilt from ids, plus an embed), a profile or community, a short link (`needsResolve`), or a link card for any other page on that site |
+| `src/parse.ts` | `parse(input)`: `toUrl`, then up to 3 `unwrapRedirect` hops, then the first matching platform, else `web` (generic shorteners in `GENERIC_SHORTENERS` get `needsResolve`). Returns null for anything we can't store |
+| `src/extract.ts` | `extractSharedUrl({url, text, title})`: the first link in `url`, then `text`, then `title`; only the `url` param may be a bare `host/path`. `findUrls(text, {limit, lone})` serves the paste box. A link ends at whitespace, CJK/full-width punctuation or an emoji; trailing sentence punctuation and unbalanced closing brackets are trimmed. **No regex lookbehind** (older Safari can't parse it) |
+| `src/id.ts` | `sha256Hex` (Web Crypto) and `saveId(link)`, which returns `{platform}_{platformId}` or `url_{first 24 hex of sha256(canonicalUrl)}` |
+| `test/fixtures/*.ts` | 255 fixtures (at least 10 per platform) + 14 inputs that must be refused: share forms from the Android and iOS apps and the web, mirrors, wrappers, profiles, junk. **Formats follow each app's known share format; ids are placeholders.** When a real link breaks the parser, add it here exactly as shared |
+| `test/parse.test.ts` | Every fixture, plus invariants: every canonical URL parses back to itself, the output is well-formed, and embeds come only from validated ids. Also refused inputs, the embed for each platform, and a seeded 5,000-input fuzz |
+| `test/extract.test.ts` · `test/id.test.ts` | Share-text extraction cases · the SHA-256 test vector and "every form of the same post gives one id" |
 
 **`apps/web/`**: the main site. deps: react ^19.3, react-dom, @fontsource-variable/outfit. devDeps: vite ^8.3, @vitejs/plugin-react ^6.1, tailwindcss + @tailwindcss/vite ^4.3.
 
@@ -320,6 +340,25 @@ Pure functions with no network access, tested against **hundreds of real share-U
 
 - **Doc id** = `${platform}_${platformId}`, otherwise `url_${sha256(canonicalUrl)[0..24]}`.
 - **When a short link resolves later:** if the canonical id already exists, **merge** tags, notes, collections and favorite into it and tombstone the short-link doc. Otherwise create the canonical doc and tombstone the short-link doc.
+
+**As built (2026-09-29): decisions made while implementing** (code map in §4.4)
+- **Invalid input:** `parse()` returns **null** for input we can't store (no link, a non-http scheme, a host without a dot, over 2048 characters).
+- **`originalUrl`:** the link as shared, with the scheme added. It falls back to the canonical URL when too long.
+- **`resolveVia`:** always set together with `needsResolve`.
+  - `"redirect"`: the Worker follows it.
+  - `"bsky-handle"`: the browser looks up the DID.
+- **Unresolved links get a `url_…` id**, then merge as described above once resolved.
+- **Worker allowlist:** `/resolve` should allow exactly the URLs where `parse(u)?.resolveVia === "redirect"`, re-checked on every hop, so core stays the single source of truth.
+- **t.co and lnkd.in are platform `web`**, not X or LinkedIn, because they wrap *any* link inside a post (app shares use the real URL). The same goes for bit.ly, tinyurl, amzn.to and the other generic shorteners.
+- **Every canonical URL parses back to itself** (tested). That's why `/tv/{c}/` (kind video) and `/live/{id}` (kind live) keep their own paths.
+- **Other pages on a known platform** (explore, search, events…) stay under that platform as `kind: "link"`.
+- **Posts we don't embed** (Facebook group posts, stories) get `embed: null`.
+- **Kinds:** X and Threads posts are both `post`; there is no "tweet" or "thread" kind.
+- **Canonical form when the username is unknown:**
+  - X: `x.com/i/status/{id}` (verified with X's oEmbed).
+  - Threads: `threads.com/t/{code}`.
+  - TikTok: `tiktok.com/@/video/{id}`. This is **unverified**, because tiktok.com doesn't respond from the owner's network; the canary must check it.
+- **Reddit comments** use `/comments/{id}/comment/{cid}/`, the form Reddit's own oEmbed returns.
 
 ### 6.3 Resolver Worker (`post-saver-resolver`, Cloudflare free plan)
 Limits: 100k requests/day (resets 00:00 UTC), **10 ms CPU** per request, 50 subrequests per request.
@@ -596,12 +635,13 @@ Hostinger's original parking records (A @ → 147.79.69.170 / 91.108.106.12, CNA
 - [x] Firebase dev/prod, web apps, Firestore nam5, deny-all rules, auth hosting site, Auth providers, API key restriction
 - [x] CI + deploy workflows (web, embed, resolver) green
 - [x] `auth.<domain>` CNAME live, Firebase Hosting domain active (the leftover TXT should be deleted)
-- [ ] ESLint + Prettier, Vitest; Dependabot; `main` branch protection
+- [x] Vitest (added with Phase 1 step 1)
+- [ ] ESLint + Prettier; Dependabot; `main` branch protection
 - [ ] Privacy/terms drafts; design tokens + base components for `/app/`
 - [ ] Emulator smoke test; Workload Identity Federation for Firebase deploys from CI (rules are deployed manually for now)
 
 ### Phase 1: v1.0 MVP (next)
-1. [ ] `packages/core` URL engine + fixture suite (§6.2)
+1. [x] `packages/core` URL engine + fixture suite (§6.2) (2026-09-29)
 2. [ ] Firestore schema, rules and the rules test suite (§6.4)
 3. [ ] Auth: popup/redirect by context, email verification, in-app-browser handling (§6.7)
 4. [ ] `saveLink()`, `/save/`, `/share/`, offline queue, dedupe, pending/synced states (§6.1)
@@ -696,6 +736,7 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
 
 **Manual device matrix**
 - **OnePlus Nord 5, Chrome, installed PWA:** share from the Instagram, TikTok, YouTube, X, Reddit, Facebook, LinkedIn, Pinterest, Threads and Bluesky apps; airplane-mode save, then it syncs.
+  - **TikTok can't be tested from the owner's network:** tiktok.com timed out from the Mac on 2026-09-29, most likely a regional block. TikTok shares and embeds are verified by the canary (GitHub runners) and by beta testers.
 - **Desktop:** Chrome/Edge/Firefox/Safari sign-in and embeds, with and without uBlock Origin; slow 3G.
 - **Google sign-in:** the in-app browser shows "Open in browser". iPhone is website-only until v1.2.
 - **Domain-switch rehearsal** on dev.
@@ -715,3 +756,14 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
     - CI + deploy (first run: all 3 jobs green). `<domain>` and `embed.<domain>` are live with HTTPS enforced.
   - The owner then added the `auth` CNAME: the Firebase Hosting domain is active and `/__/auth/handler` returns 200 over HTTPS. The leftover `auth` TXT still needs deleting.
   - CLAUDE.md was expanded into the single source of truth, including the full code map (§4.4).
+- **2026-09-29:** Phase 1, step 1: the URL engine.
+  - **Built `packages/core`:**
+    - `parse()` with 10 platform matchers + generic links, redirect-wrapper unwrapping, and tracking removal.
+    - Share-text extraction for `/save/` and `/share/`.
+    - `saveId()` for deduplication.
+  - **Tests:** Vitest 5 added; `pnpm test` now runs in `pnpm verify` and CI. 571 tests pass: 255 fixtures, invariants, embeds, extraction, ids and a fuzz.
+  - **A bug caught by the fixtures before shipping:** LinkedIn slugs that start with `activity-` weren't recognised.
+  - **Live probes:**
+    - X `/i/status/{id}` and Reddit's comment URL form are confirmed.
+    - tiktok.com is unreachable from the owner's network (§11).
+  - `.claude/PROJECT_PLAN.md`, the local copy of the original plan, is git-ignored.

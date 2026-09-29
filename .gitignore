@@ -19,3 +19,6 @@ ui-debug.log
 
 # Generated from site.config.ts at build time
 apps/*/src/generated/
+
+# Local copy of the project plan (contains the real domain/brand; never pushed)
+.claude/PROJECT_PLAN.md
