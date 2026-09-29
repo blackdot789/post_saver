@@ -9,8 +9,11 @@ import {
   KINDS,
   LIMITS,
   PLATFORMS,
+  moveToTop,
   newSave,
+  newUserDoc,
   parse,
+  restoreFromTrash,
   saveId,
   tombstone,
   type NewSaveOptions,
@@ -141,6 +144,10 @@ describe("user profile", () => {
     await assertSucceeds(setDoc(doc(db("alice"), path), userDoc()));
     await assertSucceeds(getDoc(doc(db("alice"), path)));
     await assertSucceeds(updateDoc(doc(db("alice"), path), { "settings.theme": "dark", updatedAt: serverTimestamp() }));
+  });
+  it("accepts the profile the app creates", async () => {
+    const created = newUserDoc({ email: "alice@example.com", displayName: "Alice", now: serverTimestamp() });
+    await assertSucceeds(setDoc(doc(db("alice"), path), created));
   });
   it("an unverified email can't write", async () => {
     await assertFails(setDoc(doc(db("unverified"), path), userDoc()));
@@ -315,7 +322,7 @@ describe("saves: edit", () => {
     ["favorite", { favorite: true }],
     ["trash", { status: "trashed", trashedAt: serverTimestamp() }],
     ["title and author from enrichment", { title: "A reel", author: "natgeo", needsMeta: false }],
-    ["move to top", { savedAt: serverTimestamp() }],
+    ["move to top", moveToTop(serverTimestamp())],
     ["removing the note", { note: deleteField() }],
   ])("the owner can change %s", async (_label, change) => {
     const s = await existingSave();
@@ -325,7 +332,14 @@ describe("saves: edit", () => {
   it("restoring from trash", async () => {
     const s = await existingSave();
     await seed(s.path, { ...s.data, createdAt: past(3), updatedAt: past(1), savedAt: past(3), status: "trashed", trashedAt: past(1) });
-    await assertSucceeds(updateDoc(doc(db("alice"), s.path), { status: "active", trashedAt: deleteField(), ...now() }));
+    await assertSucceeds(updateDoc(doc(db("alice"), s.path), restoreFromTrash(serverTimestamp(), deleteField())));
+  });
+
+  it("sharing a trashed post again restores it and moves it to the top", async () => {
+    const s = await existingSave();
+    await seed(s.path, { ...s.data, createdAt: past(3), updatedAt: past(1), savedAt: past(3), status: "trashed", trashedAt: past(1) });
+    const stamp = serverTimestamp();
+    await assertSucceeds(updateDoc(doc(db("alice"), s.path), { ...restoreFromTrash(stamp, deleteField()), ...moveToTop(stamp) }));
   });
 
   it.each([

@@ -1,4 +1,4 @@
-import { useId, useState, type InputHTMLAttributes } from "react";
+import { useId, useState, type InputHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cx } from "./cx.ts";
 
 export interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "id"> {
@@ -55,6 +55,28 @@ export function PasswordField({ label, hint, className, ...input }: TextFieldPro
           {shown ? "Hide" : "Show"}
         </button>
       </div>
+      {hint && (
+        <p id={`${id}-hint`} className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export interface TextAreaProps extends Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "id"> {
+  label: string;
+  hint?: string;
+}
+
+export function TextArea({ label, hint, className, ...textarea }: TextAreaProps) {
+  const id = useId();
+  return (
+    <div className={className}>
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium">
+        {label}
+      </label>
+      <textarea id={id} aria-describedby={hint ? `${id}-hint` : undefined} className={cx(INPUT, "resize-y")} {...textarea} />
       {hint && (
         <p id={`${id}-hint`} className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
           {hint}

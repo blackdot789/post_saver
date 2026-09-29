@@ -51,12 +51,16 @@ export function mainSiteCsp({ emulators = false }: CspOptions = {}): string {
     // Firebase Auth's popup/redirect sign-in loads Google's iframe helper script.
     "script-src": ["'self'", "https://apis.google.com"],
     "style-src": ["'self'"],
-    "img-src": ["'self'", "data:"],
+    // www.google.com: when the connection drops, Firestore's network layer (WebChannel) loads a
+    // 1×1 image from there to tell "offline" from "server down" in its statistics.
+    "img-src": ["'self'", "data:", "https://www.google.com"],
     "font-src": ["'self'"],
     "connect-src": [
       "'self'",
       "https://identitytoolkit.googleapis.com",
       "https://securetoken.googleapis.com",
+      // The database (the SDK's WebChannel/long-polling connection).
+      "https://firestore.googleapis.com",
       ...(emulators ? ["http://127.0.0.1:9099", "http://127.0.0.1:8080"] : []),
     ],
     // The embed sandbox, and the sign-in helper frame on auth.<domain>.

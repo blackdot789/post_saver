@@ -11,7 +11,7 @@ export function BrandLink({ className }: { className?: string }) {
   );
 }
 
-/** Centered card on the brand background, used by the sign-in pages. */
+/** Centered card on the brand background, used by the sign-in and save pages. */
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <div className="relative min-h-dvh overflow-x-hidden">

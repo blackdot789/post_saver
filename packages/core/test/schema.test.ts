@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { LIMITS, SCHEMA_VERSION, newSave, normalizeTag, normalizeTags, parse, tombstone } from "../src/index.ts";
+import {
+  LIMITS,
+  SCHEMA_VERSION,
+  moveToTop,
+  newSave,
+  newUserDoc,
+  normalizeTag,
+  normalizeTags,
+  parse,
+  planSave,
+  restoreFromTrash,
+  tombstone,
+} from "../src/index.ts";
 
 describe("normalizeTag", () => {
   it.each([
@@ -80,5 +92,42 @@ describe("newSave", () => {
 describe("tombstone", () => {
   it("keeps only what other devices need to learn about the delete", () => {
     expect(tombstone(1)).toEqual({ deleted: true, updatedAt: 1, schemaVersion: SCHEMA_VERSION });
+  });
+});
+
+describe("planSave", () => {
+  it.each([
+    ["nothing stored", undefined, "create"],
+    ["known to be missing", null, "create"],
+    ["a tombstone", { deleted: true, updatedAt: 1 }, "create"],
+    ["a live save", { deleted: false, status: "active" }, "exists"],
+    ["a trashed save", { deleted: false, status: "trashed" }, "restore"],
+  ])("%s → %s", (_label, stored, plan) => {
+    expect(planSave(stored)).toBe(plan);
+  });
+});
+
+describe("edits", () => {
+  it("move to top bumps savedAt and updatedAt only", () => {
+    expect(moveToTop("now")).toEqual({ savedAt: "now", updatedAt: "now" });
+  });
+  it("restoring from trash removes trashedAt", () => {
+    expect(restoreFromTrash("now", "DELETE")).toEqual({ status: "active", trashedAt: "DELETE", updatedAt: "now" });
+  });
+});
+
+describe("newUserDoc", () => {
+  it("starts with empty settings and leaves out a missing name", () => {
+    expect(newUserDoc({ email: "a@example.com", displayName: null, now: 1 })).toEqual({
+      email: "a@example.com",
+      createdAt: 1,
+      updatedAt: 1,
+      settings: {},
+      schemaVersion: SCHEMA_VERSION,
+    });
+  });
+  it("trims and caps the display name", () => {
+    const doc = newUserDoc({ email: "a@example.com", displayName: ` ${"n".repeat(150)} `, now: 1 });
+    expect(doc.displayName).toBe("n".repeat(LIMITS.displayName));
   });
 });

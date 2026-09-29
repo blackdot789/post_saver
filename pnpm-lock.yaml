@@ -212,6 +212,9 @@ importers:
       '@postsaver/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@postsaver/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -278,6 +281,9 @@ importers:
       '@playwright/test':
         specifier: ^1.63.0
         version: 1.63.0
+      '@postsaver/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@types/node':
         specifier: ^26.6.3
         version: 26.6.3

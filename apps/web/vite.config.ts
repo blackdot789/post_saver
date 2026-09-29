@@ -22,7 +22,9 @@ export default defineConfig(({ mode }) => ({
             name: site.brand.name,
             short_name: site.brand.shortName,
             description: site.brand.description,
-            start_url: "/",
+            // A fixed id keeps installs the same app even if start_url changes later.
+            id: "/",
+            start_url: "/app/",
             scope: "/",
             display: "standalone",
             background_color: "#ffffff",
@@ -32,6 +34,13 @@ export default defineConfig(({ mode }) => ({
               { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
               { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
             ],
+            // Android: the installed app appears in the Share menu and receives the shared link
+            // (CLAUDE.md §6.1). Apps put the link in `text` or `url`.
+            share_target: {
+              action: "/share/",
+              method: "GET",
+              params: { title: "title", text: "text", url: "url" },
+            },
           },
           null,
           2,
@@ -48,6 +57,8 @@ export default defineConfig(({ mode }) => ({
         notFound: here("404.html"),
         login: here("login/index.html"),
         app: here("app/index.html"),
+        save: here("save/index.html"),
+        share: here("share/index.html"),
       },
     },
   },

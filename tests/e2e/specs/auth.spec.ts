@@ -1,28 +1,9 @@
-import { expect, test, type Page } from "@playwright/test";
 import { PASSWORD, createUser, emailLink, uniqueEmail } from "./emulator.ts";
+import { expect, signIn, test } from "./fixtures.ts";
 
 const INSTAGRAM_ANDROID =
   "Mozilla/5.0 (Linux; Android 14; CPH2621 Build/UP1A.231005.007; wv) AppleWebKit/537.36 (KHTML, like Gecko) " +
   "Version/4.0 Chrome/129.0.6668.100 Mobile Safari/537.36 Instagram 350.0.0.37.109 Android (34/14; 450dpi; 1080x2412; OnePlus)";
-
-// Every test also checks that the page broke no Content-Security-Policy rule.
-const cspErrors = new WeakMap<Page, string[]>();
-test.beforeEach(({ page }) => {
-  const errors: string[] = [];
-  cspErrors.set(page, errors);
-  page.on("console", (msg) => {
-    if (/Content Security Policy|Refused to/i.test(msg.text())) errors.push(msg.text());
-  });
-});
-test.afterEach(({ page }) => {
-  expect(cspErrors.get(page) ?? []).toEqual([]);
-});
-
-async function signIn(page: Page, email: string, password = PASSWORD) {
-  await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-}
 
 test("the sign-in page is built with the site's security policy", async ({ page }) => {
   await page.goto("/login/");
@@ -51,7 +32,7 @@ test("email sign-up: blocked until the address is verified, then the library ope
 
   await page.getByRole("button", { name: "I've verified it" }).click();
   await expect(page).toHaveURL(/\/app\/$/);
-  await expect(page.getByRole("heading", { name: "You're signed in" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your library" })).toBeVisible();
 });
 
 test("an unverified account that signs in is asked to verify", async ({ page, request }) => {

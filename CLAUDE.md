@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-This file is the **single source of truth for the whole project**: product, decisions, the full plan, live infrastructure, status and how to work with the owner. Read it fully before doing anything, and **update §12 (progress log) and the roadmap checkboxes (§9) whenever work lands**.
+This file is the **single source of truth for the whole project**: product, decisions, the full plan, live infrastructure, status and how to work with the owner. Read it fully before doing anything, and **update §12 (progress log) and the roadmap checkboxes (§9) whenever work lands**. Also update the **"📍 Progress tracker"** at the top of `.claude/PROJECT_PLAN.md` (the step table, the progress bar, "Where we are" and the owner's to-do list). The owner reads that tracker to see what's done and what's left. It's git-ignored and exists only on the owner's Mac; skip it if it's missing.
 
 > **Naming rule for this file and every other tracked file.** `pnpm check:domains` fails CI if the domain or brand name appears literally anywhere except `site.config.ts` and `brand/`. So docs say **`<domain>`** for the main domain and **"the brand"** for the product name. The **current values are in `site.config.ts`**: `domain` (a *temporary test domain* registered at Hostinger) and `brand.name`. The tagline is "Save Posts Across All Platforms". Repo and project names use `post_saver` / `post-saver`, which the check allows.
 
@@ -18,9 +18,10 @@ This file is the **single source of truth for the whole project**: product, deci
   - `auth.<domain>` also serves the Firebase auth helpers over HTTPS.
   - **Phase 1, step 1 (the URL engine, `packages/core`) is done.**
   - **Phase 1, step 2 (Firestore schema, rules, rules tests) is done** and pushed (`039cbdc`). The owner deployed the rules and indexes to both projects (Claude's auto-mode safety check blocks `firebase deploy`, so the owner runs deploys); Claude verified that the live rules equal `firebase/firestore.rules`.
-  - **Phase 1, step 3 (sign-in) is done:** `/login/` + a minimal `/app/`, 42 web unit tests, 8 browser tests (Playwright + Auth emulator). Pushed; it goes live on `<domain>/login/`. Needs the owner's device test (§10).
-  - **Next: Phase 1, step 4: `saveLink()`, `/save/`, `/share/`** (§6.1, §9).
-- **The original plan file**, `~/.claude/plans/make-a-full-proof-vivid-rose.md`, exists only on the owner's Mac and is superseded by this file.
+  - **Phase 1, step 3 (sign-in) is done** and live on `<domain>/login/`. The owner confirmed Google and email sign-in work (2026-09-29).
+  - **Phase 1, step 4 (saving posts) is done:** `saveLink()`, `/save/`, `/share/` (+ the manifest `share_target`), the signed-out waiting list, offline saves, "Already saved"/"Move to top", tags and a note, and a temporary "latest saves" list on `/app/`. 57 web unit tests, 19 browser tests (now with the Firestore emulator too). No rules change, so no rules deploy. Needs the owner's device test (§10).
+  - **Next: Phase 1, step 5: the sync engine + status UI** (§6.5, §9).
+- **The original plan file**, `~/.claude/plans/make-a-full-proof-vivid-rose.md`, exists only on the owner's Mac and is superseded by this file. Its local copy `.claude/PROJECT_PLAN.md` (git-ignored) carries the owner's progress tracker at the top; keep it current (see above).
 
 ## 1. Working with the owner
 
@@ -71,7 +72,7 @@ pnpm check:domains                         # fail if domain/brand is hardcoded o
 pnpm typecheck                             # all packages + scripts/
 pnpm test                                  # Vitest in every package that has a `test` script (packages/core)
 pnpm test:rules                            # Firestore rules tests: starts the emulator (Java 21), runs firebase/test
-pnpm test:e2e                              # browser tests: builds apps/web --mode e2e, starts the Auth emulator, runs Playwright (system Chrome)
+pnpm test:e2e                              # browser tests: builds apps/web --mode e2e, starts the Auth + Firestore emulators, runs Playwright (system Chrome)
 pnpm --filter @postsaver/core exec vitest  # URL engine tests in watch mode
 pnpm brand                                 # regenerate icons + OG image from brand/ (outputs committed)
 pnpm exec tsx scripts/config-get.ts hosts.embed   # print one config value (CI uses this)
@@ -100,7 +101,7 @@ cd firebase && firebase emulators:start    # Auth 9099, Firestore 8080, UI 4000 
 site.config.ts        the ONLY place for domain, brand, contacts, GitHub repos, Worker URL, Firebase web configs
 packages/config/      typed access: index.ts (hosts/origins/firebaseConfig), html.ts (%TOKENS%, CSP), vite-plugin.ts
 packages/core/        URL engine: parse(), extractSharedUrl()/findUrls(), saveId(); fixture tests (Vitest)
-apps/web/             main site: static landing + 404, React pages /login/ and /app/ (src/{auth,lib,ui,pages})
+apps/web/             main site: static landing + 404, React pages /login/, /app/, /save/, /share/ (src/{auth,capture,data,lib,ui,pages})
 apps/embed/           embed sandbox (placeholder: answers the parent via postMessage)
 workers/resolver/     Cloudflare Worker (Phase 0: /health + config-driven CORS)
 firebase/             firebase.json, .firebaserc (dev/prod aliases), firestore.rules + test/ (rules tests), indexes, hosting/
@@ -118,7 +119,7 @@ tests/e2e/            Playwright browser tests against the Firebase emulators
   - `forbiddenLiterals()` feeds `check:domains`.
 - **`packages/config/src/html.ts`**
   - `%TOKEN%` values for HTML: `BRAND_NAME`, `BRAND_NAME_FIRST`/`BRAND_NAME_LAST` (the landing styles the last word with the gradient), `BRAND_TAGLINE`, `BRAND_DESCRIPTION`, `THEME_COLOR`, `APP_ORIGIN`, `APP_HOST`, `EMBED_ORIGIN`, `SUPPORT_EMAIL`, `YEAR`. An unknown token throws at build time.
-  - `mainSiteCsp({ emulators? })` builds the main-site CSP. **Add every new third-party origin here.** Now allowed: `script-src https://apis.google.com` (Firebase Auth's popup/redirect helper), `connect-src` identitytoolkit + securetoken, `frame-src` embed + auth origins. `emulators: true` (only for `--mode e2e` builds) adds `http://127.0.0.1:9099` and `:8080`.
+  - `mainSiteCsp({ emulators? })` builds the main-site CSP. **Add every new third-party origin here.** Now allowed: `script-src https://apis.google.com` (Firebase Auth's popup/redirect helper), `connect-src` identitytoolkit + securetoken + firestore.googleapis.com, `img-src https://www.google.com` (Firestore's WebChannel loads a 1×1 `cleardot.gif` from there when the connection drops, to tell offline from server-down; blocking it only logs CSP errors), `frame-src` embed + auth origins. `emulators: true` (only for `--mode e2e` builds) adds `http://127.0.0.1:9099` and `:8080`.
 - **`packages/config/src/vite-plugin.ts`** (`siteConfigPlugin`), used by both apps:
   - Replaces tokens.
   - Writes brand CSS variables to `apps/*/src/generated/brand.css` (git-ignored). Tailwind `@theme` maps them to the `brand-from`, `brand-to` and `brand-ink` utilities.
@@ -195,15 +196,15 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 | `src/id.ts` | `sha256Hex` (Web Crypto) and `saveId(link)`, which returns `{platform}_{platformId}` or `url_{first 24 hex of sha256(canonicalUrl)}` |
 | `test/fixtures/*.ts` | 255 fixtures (at least 10 per platform) + 14 inputs that must be refused: share forms from the Android and iOS apps and the web, mirrors, wrappers, profiles, junk. **Formats follow each app's known share format; ids are placeholders.** When a real link breaks the parser, add it here exactly as shared |
 | `test/parse.test.ts` | Every fixture, plus invariants: every canonical URL parses back to itself, the output is well-formed, and embeds come only from validated ids. Also refused inputs, the embed for each platform, and a seeded 5,000-input fuzz |
-| `src/schema.ts` | The Firestore document shapes (§6.4): `SaveDoc<T>`, `Tombstone<T>`, `CollectionDoc<T>`, `UserDoc<T>`, `ImportDoc<T>`, `AppConfig` (`T` = timestamp type), plus `SCHEMA_VERSION` (1), `LIMITS`, the status enums, `SaveSource`, `STABLE_THUMB_PREFIX`. Helpers: `normalizeTag`/`normalizeTags`, **`newSave(link, {source, now, savedAt?, tags?, note?})`**, which builds the exact document the rules accept, and `tombstone(now)`. The app and the rules tests both use them |
+| `src/schema.ts` | The Firestore document shapes (§6.4): `SaveDoc<T>`, `Tombstone<T>`, `CollectionDoc<T>`, `UserDoc<T>`, `ImportDoc<T>`, `AppConfig` (`T` = timestamp type), plus `SCHEMA_VERSION` (1), `LIMITS`, the status enums, `SaveSource`, `STABLE_THUMB_PREFIX`. Helpers: `normalizeTag`/`normalizeTags`, **`newSave(link, {source, now, savedAt?, tags?, note?})`**, which builds the exact document the rules accept, `tombstone(now)`, **`planSave(stored)`** (`create` for missing/tombstone, `restore` for trashed, `exists` for live), `moveToTop(now)`, `restoreFromTrash(now, deleteField)` and `newUserDoc({email, displayName, now})`. The app and the rules tests both use them |
 | `test/extract.test.ts` · `test/id.test.ts` · `test/schema.test.ts` | Share-text extraction cases · the SHA-256 test vector and "every form of the same post gives one id" · tag normalisation, `newSave`, `tombstone` |
 
-**`apps/web/`**: the main site. deps: react ^19.3, react-dom, firebase ^12.19, @fontsource-variable/outfit. devDeps: vite ^8.3, @vitejs/plugin-react ^6.1, tailwindcss + @tailwindcss/vite ^4.3, vitest, `@postsaver/config` (imported by browser code too: `site`, `firebaseConfig`). Scripts: `dev`, `build`, `preview`, `typecheck`, `test`.
+**`apps/web/`**: the main site. deps: react ^19.3, react-dom, firebase ^12.19, @fontsource-variable/outfit. devDeps: vite ^8.3, @vitejs/plugin-react ^6.1, tailwindcss + @tailwindcss/vite ^4.3, vitest, `@postsaver/config` (imported by browser code too: `site`, `firebaseConfig`), `@postsaver/core`. Scripts: `dev`, `build`, `preview`, `typecheck`, `test`.
 
 | File | Purpose |
 |---|---|
-| `vite.config.ts` | `defineConfig(({mode}) => …)`. Plugins `siteConfigPlugin` (csp = `mainSiteCsp({ emulators: mode === "e2e" })`, brandCssPath = `src/generated/brand.css`, files = robots.txt (disallows /app/, /login/, /save/, /share/) / sitemap.xml / manifest.webmanifest), `react()` and `tailwindcss()`. `build.rollupOptions.input = { index, notFound: 404.html, login, app }`; **add each new route here** |
-| `login/index.html` · `app/index.html` | Entry pages (noindex, favicons, manifest, styles.css, `<div id="root">`, a `<noscript>` note) loading `src/pages/{login,app}/main.tsx` |
+| `vite.config.ts` | `defineConfig(({mode}) => …)`. Plugins `siteConfigPlugin` (csp = `mainSiteCsp({ emulators: mode === "e2e" })`, brandCssPath = `src/generated/brand.css`, files = robots.txt (disallows /app/, /login/, /save/, /share/) / sitemap.xml / manifest.webmanifest), `react()` and `tailwindcss()`. `build.rollupOptions.input = { index, notFound: 404.html, login, app, save, share }`; **add each new route here**. The manifest has `id: "/"` (fixed app identity), `start_url: "/app/"` and the Android **`share_target`** (GET `/share/` with `title`, `text`, `url`) |
+| `login/` · `app/` · `save/` · `share/` `index.html` | Entry pages (noindex, favicons, manifest, styles.css, `<div id="root">`, a `<noscript>` note) loading `src/pages/{login,app,save,share}/main.tsx` |
 | `.env.e2e` | `VITE_FIREBASE_ENV=demo`, `VITE_EMULATORS=1`, for `--mode e2e` builds (committed, no secrets) |
 | `vitest.config.ts` | Unit tests `src/**/*.test.ts` (kept apart from vite.config so tests don't load the site plugins) |
 | `index.html` | Static coming-soon landing: blurred gradient blobs, mark, gradient brand name (`%BRAND_NAME_FIRST%` + `%BRAND_NAME_LAST%`), tagline, description, "Coming soon" pill, platform chips, 3-step cards, footer with `%SUPPORT_EMAIL%`. Head: canonical, favicons, manifest, OG/Twitter tags, `<link rel="stylesheet" href="/src/styles.css">` |
@@ -212,27 +213,40 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 | `src/vite-env.d.ts` | Types for `VITE_FIREBASE_ENV` ("dev"/"prod"/"demo") and `VITE_EMULATORS` |
 | `src/lib/firebase.ts` | `firebaseEnv` (prod in production builds, dev otherwise, or `VITE_FIREBASE_ENV`), `useEmulators`, `firebaseApp()` (lazy `initializeApp`; `demo` = an emulator-only config, project `demo-post-saver`) |
 | `src/lib/storage.ts` | `readLocal`/`writeLocal`: localStorage wrapped in try/catch, for conveniences only |
+| `src/lib/platforms.ts` · `src/lib/useOnline.ts` | `PLATFORM_NAMES`, `describeLink` ("Instagram reel", "YouTube Short", web → "Link"), `authorLabel` (@handle, u/name), `displayHost`, `formatDay` ("12 Sep", year only when not this year) · `useOnline()` |
+| `src/data/firestore.ts` | `getDb()`: `initializeFirestore` with `persistentLocalCache({ persistentMultipleTabManager, CACHE_SIZE_UNLIMITED })` (the SDK falls back to memory where IndexedDB is blocked), emulator on 8080 when `useEmulators`. `savesOf(uid)`, `saveRef(uid, id)`, `userRef(uid)`, `errorCode(e)` |
+| `src/data/profile.ts` | `ensureProfile(user)`: creates `users/{uid}` with `newUserDoc` if the server has none; checked once per device (localStorage flag), retried next time when offline |
+| `src/data/latest.ts` | `watchLatest(uid, n)`: live newest-first saves (`orderBy savedAt desc`, pending server times estimated) for `/app/`. **Temporary**: the step-5 sync engine replaces it |
+| `src/capture/saveLink.ts` | **`saveLink(uid, link, source)`** (§6.1 "As built"), `savePending(uid)`, quick actions `moveSaveToTop`, `addTags` (arrayUnion), `removeTag` (arrayRemove), `setNote` (empty → deleteField), and `watchSave(uid, id)` (tags, note, hasPendingWrites) |
+| `src/capture/pending.ts` | The signed-out waiting list in IndexedDB (`ps-capture` / `pending`, keyed by the shared URL, max 100): `listPending`, `addPending`, `removePending` |
+| `src/capture/input.ts` | `readCapture(search, pageSource)` → `{hasInput, sharedText, link, source}`; `?src=` accepted only for web, share-android, bookmarklet, paste, extension |
+| `src/capture/useSave.ts` | `useSave(uid, link, source, onStored)` → `{sync: saving/pending/synced/failed, id, outcome, savedAt, error}` + retry; `useLiveSave(uid, id)` |
+| `src/capture/input.test.ts` | 15 unit tests: share-text extraction, `?src=`, link descriptions, dates |
 | `src/auth/environment.ts` | Pure, unit-tested: `detectBrowser(ua, standalone)` → `{os, inApp, standalone}` (Instagram, Threads, Facebook, Messenger, TikTok, LinkedIn, Snapchat, Pinterest, LINE, WeChat, or an unnamed Android `; wv)` / iOS no-`Safari/` webview; an iOS home-screen app is not a webview). `googleFlow(env)` → popup / redirect (installed app) / blocked (in-app). `openInBrowserHref(url, os)` → Android intent to Chrome with a fallback URL, iOS `x-safari-https://…`. `IN_APP_NAMES`. `currentBrowser()` |
 | `src/auth/errors.ts` | `authErrorMessage(error)`: Firebase error code → plain sentence (a Map, so odd codes can't hit Object prototype keys); silent for closed popups; unknown codes show "(code)" for support |
 | `src/auth/next.ts` | `safeNext(raw)`: only same-site paths, never `/login/` (no open redirect, no loop); `loginUrl(next)` |
 | `src/auth/session.ts` | `getAuth()` (`initializeAuth` with IndexedDB → localStorage persistence, device language, emulator when `useEmulators`; **no popup resolver at init**, so pages without Google sign-in don't load Google's iframe script). `signInWithGoogle(env)` (popup; falls back to redirect if blocked; redirect in the installed app; a sessionStorage flag marks a pending redirect), `completeGoogleRedirect()`, `signUpWithEmail` (creates + sends verification), `signInWithEmail`, `sendVerification` (continue URL `/login/?verified=1`; records the send time for the 60 s cooldown), `sendPasswordReset` (treats user-not-found as success, so it never reveals accounts), `refreshVerified()` (reload + force-refresh the ID token so the `email_verified` claim the rules check is current), `signOut`, `MIN_PASSWORD_LENGTH` (8) |
 | `src/auth/useAuth.ts` | `useAuth()` → `loading` / `signed-out` / `unverified` / `ready` (from `onIdTokenChanged`) |
-| `src/auth/*.test.ts` | 42 unit tests: 20 real in-app/browser user agents, flows, open-in-browser links, messages, redirect safety |
-| `src/ui/` | First design components: `Button` (primary gradient / secondary / link; sizes md = full width 48 px tap target, sm; `busy` spinner), `TextField` + `PasswordField` (Show/Hide), `Alert` (info/success/warning/error; role alert or status), `Spinner` + `PageSpinner`, `AuthLayout` (card on the landing's gradient background) + `BrandLink`, `icons.tsx` (Google G, mail), `cx()`. Links use `text-blue-600` in light mode, because the brand blue is only about 3:1 on white |
+| `src/auth/*.test.ts` | 42 unit tests (57 in the app with capture): 20 real in-app/browser user agents, flows, open-in-browser links, messages, redirect safety |
+| `src/ui/` | First design components: `Button` (primary gradient / secondary / link; sizes md = full width 48 px tap target, sm; `busy` spinner), `TextField` + `PasswordField` (Show/Hide), `Alert` (info/success/warning/error; role alert or status), `Spinner` + `PageSpinner`, `AuthLayout` (card on the landing's gradient background, for the sign-in and save pages) + `BrandLink`, `ButtonLink` (a link styled as a button), `TextArea`, `icons.tsx` (Google G, mail, check, alert, close), `cx()`. Links use `text-blue-600` in light mode, because the brand blue is only about 3:1 on white |
 | `src/pages/login/` | `LoginPage` (modes signin / signup / reset; notices from `?verified`/`?reset`; redirects to `next` when ready), `VerifyEmail` ("Check your email": re-checks on focus, when the tab becomes visible and every 10 s for 30 min; resend with a 60 s cooldown re-read every second; "Use a different account"), `InAppNotice` (Open in Chrome/Safari + Copy link, with a manual-copy fallback), `main.tsx` |
-| `src/pages/app/` | `AppPage`: sends signed-out and unverified visitors to `/login/?next=…`; when ready shows a header (brand, email, Sign out) and "You're signed in". The library replaces the body in later steps |
+| `src/pages/app/` | `AppPage`: sends signed-out and unverified visitors to `/login/?next=…`; when ready: `ensureProfile`, `savePending` (notice "The N links you shared before signing in are saved."), header (brand, email, Sign out), "Your library" + "Save a link", and `LatestSaves` (the 20 newest, live; "Syncing…" per row). The library replaces the list in step 7 |
+| `src/pages/save/` | `SavePage` (used by `/save/` with source `web` and `/share/` with `share-android`): signed out/unverified with a link → `KeepForLater` (waiting list, "Sign in to save this"; `next=/save/`); no link in the input → `NoLink` + paste box; ready → `SaveResult`; no input → the waiting links (`Waiting`: one → full view, several → `SaveRow` list) or `Start` (paste box). `SaveResult`: "Saved" / "Already saved" (+ date, **Move to top**) / "Restored from Trash" / "Couldn't save" (+ Try again); status line "Syncing…" / "Synced to your library." / "Saved on this device. It syncs when you're back online."; `LinkPreview`; `QuickActions` (tags, note); Open library / Done (`finish()`: `window.close()`, else `/app/`); auto-closes 1.5 s after saving when opened as a popup unless touched. `PasteForm`, `messages.ts` (Firestore error code → sentence) |
+| `src/pages/share/main.tsx` | The share target entry: `<SavePage source="share-android" />` |
 | `src/generated/brand.css` | **Generated, git-ignored**: `:root{--brand-from;--brand-to;--brand-ink}` |
 | `public/favicon.svg`, `public/icons/{favicon-32,apple-touch-icon,icon-192,icon-512,maskable-512}.png`, `public/icons/mark.svg`, `public/og.png` | **Generated by `pnpm brand`, committed**. Don't hand-edit |
 | `tsconfig.json` | `jsx: react-jsx`, types `vite/client` + `node`; includes `src`, `vite.config.ts`, `vitest.config.ts` |
 
-**`tests/e2e/`**: `@postsaver/e2e`, Playwright browser tests. devDeps: @playwright/test ^1.63, firebase-tools ^15.31, @types/node.
+**`tests/e2e/`**: `@postsaver/e2e`, Playwright browser tests. devDeps: @playwright/test ^1.63, firebase-tools ^15.31, @types/node, `@postsaver/core` (to seed documents exactly as the app writes them).
 
 | File | Purpose |
 |---|---|
-| `package.json` | `test:e2e` = `vite build --mode e2e --outDir dist-e2e` (in apps/web), then `firebase emulators:exec --config ../../firebase/firebase.json --only auth --project demo-post-saver 'playwright test'`; `typecheck` |
+| `package.json` | `test:e2e` = `vite build --mode e2e --outDir dist-e2e` (in apps/web), then `firebase emulators:exec --config ../../firebase/firebase.json --only auth,firestore --project demo-post-saver 'playwright test'` (the Firestore emulator runs the real `firestore.rules`); `typecheck` |
 | `playwright.config.ts` | One worker, system Chrome, traces kept on failure, 1 retry on CI. `webServer` starts `./node_modules/.bin/vite preview` in apps/web **directly, not through pnpm**, because through pnpm Playwright couldn't stop it and the run hung |
-| `specs/emulator.ts` | Talks to the Auth emulator's REST API: `createUser(request, email, verified)` (admin `Bearer owner` to mark verified), `emailLink(request, email, type)` (the emulator's "sent" verify/reset links), `uniqueEmail`, `PASSWORD` |
-| `specs/auth.spec.ts` | Every test also fails on any CSP violation in the console. Covers: the CSP meta is present; sign-up → "Check your email" (cooldown running) → "not verified yet" → open the emailed link → `/app/`; an unverified sign-in asks to verify; wrong password; `/app/` → sign-in → back, then sign-out; `?next=//evil.example` lands on `/app/`; password reset looks the same for existing and unknown emails; inside Instagram's browser Google is disabled, "Open in Chrome" is an intent link, and email sign-in works |
+| `specs/emulator.ts` | Talks to the emulators' REST APIs: `createUser(request, email, verified)` → uid (admin `Bearer owner` to mark verified), `emailLink(request, email, type)` (the emulator's "sent" verify/reset links), `uniqueEmail`, `PASSWORD`; Firestore `readDoc(request, path)` (plain values, timestamps as ISO strings) and `writeDoc(request, path, data)` (Dates → timestamps), both as admin, bypassing the rules |
+| `specs/fixtures.ts` | `test` with an automatic CSP guard (any "Content Security Policy"/"Refused to" console message fails the test), `watchCsp(page)` for extra pages/contexts, `signIn(page, email)` |
+| `specs/auth.spec.ts` | Covers: the CSP meta is present; sign-up → "Check your email" (cooldown running) → "not verified yet" → open the emailed link → `/app/`; an unverified sign-in asks to verify; wrong password; `/app/` → sign-in → back, then sign-out; `?next=//evil.example` lands on `/app/`; password reset looks the same for existing and unknown emails; inside Instagram's browser Google is disabled, "Open in Chrome" is an intent link, and email sign-in works |
+| `specs/save.spec.ts` | 11 tests: IG share text → `instagram_{code}` doc with the canonical URL, sharing another form → "Already saved" → Move to top changes savedAt; tags + note stored (arrayUnion/remove); a second browser context sees the save live and as already saved; signed-out share → sign in → saved on `/save/`; new account → verify → saved; waiting links saved by `/app/` (notice); no link → paste box; offline save → "Saved on this device" → online → synced; **offline save of a post another device saved → "Already saved", original untouched**; trashed post → "Restored from Trash"; bookmarklet popup closes itself |
 
 **`apps/embed/`**: the embed sandbox (Phase 0 placeholder). devDeps: vite, `@postsaver/config`.
 
@@ -261,7 +275,7 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 | `firestore.indexes.json` | `fieldOverrides`: no indexes on saves `note`, `title`, `thumb`, `originalUrl`, `onPlatform` and items `text`; saves `updatedAt` keeps both collection indexes and adds a **collection-group** ascending index (for the incremental backup job) |
 | `package.json` | `@postsaver/firebase`: `test:rules` = `firebase emulators:exec --only firestore --project demo-post-saver 'vitest run'`; `typecheck`. devDeps: @firebase/rules-unit-testing ^5.0.2, firebase ^12.19, firebase-tools ^15.31 (pinned by the lockfile so CI uses the same CLI), vitest, @types/node, `@postsaver/core` |
 | `vitest.config.ts` · `tsconfig.json` | One shared emulator, so no file parallelism; longer timeouts · extends the base, node types |
-| `test/rules.test.ts` | 117 cases. Documents are built exactly as the app will build them (`parse` → `saveId` → `newSave`), so core and rules can't drift. Also checks that `platforms()`/`kinds()` in the rules equal core's lists. Covers owner vs stranger vs signed out, unverified email, every field limit (in both directions), the id-from-link check, edits, tombstones, hard-delete timing, account deletion, collections, imports and closed paths |
+| `test/rules.test.ts` | 119 cases. Documents are built exactly as the app will build them (`parse` → `saveId` → `newSave`), so core and rules can't drift. Also checks that `platforms()`/`kinds()` in the rules equal core's lists. Covers owner vs stranger vs signed out, unverified email, every field limit (in both directions), the id-from-link check, edits, tombstones, hard-delete timing, account deletion, collections, imports and closed paths |
 | `hosting/index.html` | Placeholder page for the auth subdomain; Firebase serves `/__/auth/*` automatically |
 
 **`scripts/`**: run with tsx. `tsconfig.json` includes `*.ts` with node types.
@@ -352,6 +366,23 @@ Every path calls one idempotent **`saveLink()`** (in `packages/core` + `apps/web
     - **Re-importing reconciles removals** according to the user's setting.
     - TikTok favorites and Facebook saved exports come in v1.x.
 - **v1.1 extension:** see §9.
+
+**As built (2026-09-29): step 4** (code map in §4.4: `apps/web/src/capture`, `src/pages/save`, `tests/e2e/specs/save.spec.ts`)
+- **`saveLink(uid, link, source)`:**
+  1. `id = saveId(link)`.
+  2. Looks up what's stored: the **server** copy if it answers within 1.2 s (only when `navigator.onLine`), else the **device cache**, else "unknown". The server comes first because a cached "exists" can be stale (deleted on another device).
+  3. `planSave(stored)`: `create` → `setDoc(newSave(…))`; `restore` (trashed) → `restoreFromTrash` + `moveToTop`; `exists` → nothing written, shows "Already saved on {savedAt}".
+  4. The write is **not awaited**. A `getDocFromCache` right after it returns only once the write is in IndexedDB (Firestore runs local work in order), so "saved on this device" is true even if the page closes at once.
+  5. `synced` settles when the server confirms. If the server **refuses** (permission-denied / not-found / failed-precondition: its copy differs, e.g. another device saved the post first), it force-refreshes the ID token, reads the server copy and applies the plan again, so an offline "Saved" turns into "Already saved" instead of a duplicate. An "exists" answered from the cache is re-checked on the server.
+  6. One save per link at a time (in-flight map), so double taps and React's double effects can't race.
+- **`savedAt` uses the server time** (`serverTimestamp()`), also for offline and waiting saves: no risk of rules refusing a device clock that's over an hour ahead.
+- **Signed out or unverified:** the shared link goes into the IndexedDB waiting list (`ps-capture`), the address bar is cleared, and the page offers Sign in / Create an account (or "Verify my email") with `next=/save/`. `/save/` with no input saves the waiting links (one → full view with quick actions), and `/app/` saves any left over. If IndexedDB is unavailable, the link rides through sign-in in the `next` URL instead.
+- **`/save/` with no input:** signed out → sign-in; otherwise the paste box (source `paste`). Shared text without a link → "No link found" + the text + paste box.
+- **Quick actions now:** tags (arrayUnion/arrayRemove, max 30) and a note. **Collections** come with the library (step 7).
+- **Popups** (a `window.opener`, e.g. the bookmarklet) close 1.5 s after the save settles unless the user touches the page. "Done" calls `window.close()` (works for share-target windows whose history has one entry) and otherwise goes to `/app/`.
+- **Profile doc:** `/app/` and `/save/` create `users/{uid}` (`newUserDoc`) once per device when the server has none.
+- **Android share target:** in the manifest now (with `start_url: "/app/"`, fixed `id: "/"`). **There's no service worker yet**, so `/share/` needs a connection to load; offline page loading comes with vite-plugin-pwa (step 9/11). Once the page is loaded, offline saves work.
+- **Deferred:** `navigator.storage.persist()` (step 5, with the sync engine; Firefox would prompt), bsky handle → DID resolution and short links (step 8), naming the Firebase vendor chunks and the 1.5 s budget check (step 11).
 
 ### 6.2 URL engine (`packages/core`), the core of robustness
 Pure functions with no network access, tested against **hundreds of real share-URL fixtures** from each platform's Android app, iOS app and web.
@@ -725,8 +756,8 @@ Hostinger's original parking records (A @ → 147.79.69.170 / 91.108.106.12, CNA
 ### Phase 1: v1.0 MVP (next)
 1. [x] `packages/core` URL engine + fixture suite (§6.2) (2026-09-29)
 2. [x] Firestore schema, rules and the rules test suite (§6.4) (2026-09-29; deployed to both projects)
-3. [x] Auth: popup/redirect by context, email verification, in-app-browser handling (§6.7) (2026-09-29; **the owner's device test pending**)
-4. [ ] `saveLink()`, `/save/`, `/share/`, offline queue, dedupe, pending/synced states (§6.1)
+3. [x] Auth: popup/redirect by context, email verification, in-app-browser handling (§6.7) (2026-09-29; the owner confirmed Google + email sign-in)
+4. [x] `saveLink()`, `/save/`, `/share/`, offline queue, dedupe, pending/synced states (§6.1) (2026-09-29; **the owner's device test pending**)
 5. [ ] Sync engine + status UI (§6.5)
 6. [ ] Embed sandbox renderers + host component + fallbacks + preview consent (§6.6)
 7. [ ] Library features: grid/list, search, filters, collections, tags, notes, favorites, bulk actions, trash, unavailable
@@ -771,10 +802,11 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
    - Check the Firebase Hosting custom-domain status with:
      `curl -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "x-goog-user-project: post-saver-prod" https://firebasehosting.googleapis.com/v1beta1/projects/post-saver-prod/sites/post-saver-prod/customDomains`
    - Expect `hostState` HOST_ACTIVE and the cert active.
-2. **Device test of sign-in** on `https://<domain>/login/`, on the OnePlus (Chrome) and desktop Chrome:
-   - Create an account with email; get the email; open the link; land in the library.
-   - Sign out, then sign in with Google.
-   - Send yourself the `/login/` link in an Instagram DM, open it inside Instagram, and check the "Open in Chrome" button.
+2. **Device test of saving (step 4)** on the OnePlus (Chrome) and desktop Chrome. Google and email sign-in were confirmed on 2026-09-29.
+   - Desktop: `https://<domain>/app/` → "Save a link" → paste an Instagram/YouTube link → "Saved · Synced". Paste it again → "Already saved" → Move to top.
+   - Phone: Chrome menu → "Add to Home screen" / "Install app". Then in Instagram: Share → the app → "Saved". Watch it appear on the laptop's `/app/` without reloading.
+   - Airplane mode on the phone with `/save/` already open: paste a link → "Saved on this device" → airplane mode off → "Synced".
+   - Still open from step 3: send yourself the `/login/` link in an Instagram DM, open it inside Instagram, and check the "Open in Chrome" button.
 
 **Deploying Firestore rules/indexes (owner, whenever a step changes `firebase/`):** Claude's auto-mode safety check blocks `firebase deploy`, so the owner runs this in the VS Code terminal, from the repo folder, and Claude verifies the result:
 `cd firebase && pnpm exec firebase deploy --only firestore --project dev && pnpm exec firebase deploy --only firestore --project prod`
@@ -812,10 +844,8 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
   - Instagram export parser
   - config generators: switching `domain` in a test config changes the CSP, manifest, CORS, sitemap and legal pages
 - `pnpm test:rules`: every rule case in §6.4.
-- `pnpm test:e2e` (Playwright + emulators). Built so far: the sign-in suite (§4.4 `tests/e2e`). Still to come:
-  1. Email sign-up → blocked until verified → verify → the pending save syncs. (The sign-up/verify part is done; the pending-save part comes with step 4.)
-  2. `/share/?text=<IG link with igsh>` → canonical id; sharing again → "Already saved".
-  3. Offline save → reload → online → it appears in a second browser context.
+- `pnpm test:e2e` (Playwright + emulators). Built so far: the sign-in and save suites (§4.4 `tests/e2e`). Done: (1) sign-up → blocked until verified → verify → the pending save syncs; (2) `/share/?text=<IG link with igsh>` → canonical id, sharing again → "Already saved"; (3, partly) offline save → online → synced, and a second browser context sees saves live. Still to come:
+  3. Offline save → **reload** → online (needs the service worker, step 9/11).
   4. Trash → restore → delete → the tombstone propagates; a wiped cache triggers a full resync.
   5. v1.2: REST `commit` to the inbox is moved into the library; revoked key, kill switch or oversize URL → rejected.
   6. A 1,200-item import with a cap of 500 → pauses and resumes the next day.
@@ -878,3 +908,11 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
     - Password reset for an unknown email showed a wrong-password message, which also revealed that no account existed.
   - **Also fixed:** light-mode links were too faint (about 3:1 contrast), and the Playwright run hung because the preview server started through pnpm couldn't be stopped.
   - **Verified live:** the OAuth redirect URI (Google's sign-in page loads with it), and no CSP violations with the prod config. The owner confirmed Google sign-in's publishing status is "In production" in both projects.
+  - Pushed as `05a007a`; CI (check, rules, e2e) and Deploy (web, embed, resolver) green. **Live check** (Chrome, phone viewport): `/login/` and `/app/` return 200 with the CSP meta and noindex; `/app/` sends visitors to `/login/?next=%2Fapp%2F`; "Continue with Google" opens accounts.google.com with `redirect_uri=https://auth.<domain>/__/auth/handler` and no error; no CSP errors. Chrome logs two "Cross-Origin-Opener-Policy policy would block the window.closed call" warnings during the Google popup; they come from Firebase's popup check against Google's page and are harmless (report-only).
+  - The owner tested sign-in on 2026-09-29: Google and email both work.
+- **2026-09-29:** Phase 1, step 4: saving posts.
+  - **Built:** `saveLink()` (server-first lookup with a 1.2 s cap, then the device cache; never waits on the write; self-corrects when the server refuses), `/save/` + `/share/` (one `SavePage`), the signed-out waiting list in IndexedDB, "Already saved" + Move to top, restore from Trash, tags + note, popup auto-close, the Firestore setup with the unlimited multi-tab cache, the profile doc, and a temporary live "latest saves" list on `/app/`. The manifest now has the Android `share_target` (and `start_url: /app/`, `id: /`).
+  - **Core:** `planSave`, `moveToTop`, `restoreFromTrash`, `newUserDoc`; the rules tests now use them (119 cases, no rules change, so nothing to deploy).
+  - **Tests:** 57 web unit tests; the browser suite runs the Firestore emulator too (real rules): 19 tests, 11 of them new for saving, including offline → online and the refused-offline-create → "Already saved" correction. Every browser test fails on a CSP violation.
+  - **Caught before shipping:** the CSP guard found that Firestore's network layer loads `www.google.com/images/cleardot.gif` whenever the connection drops; allowed in `img-src` (harmless, statistics only).
+  - **Screens checked** at phone width in light and dark: saved (tags, note), already saved, signed-out prompt, no link, paste box, library list.

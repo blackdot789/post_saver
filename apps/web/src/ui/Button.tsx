@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes } from "react";
 import { cx } from "./cx.ts";
 import { Spinner } from "./Spinner.tsx";
 
@@ -26,6 +26,17 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   busy?: boolean;
 }
 
+function buttonClass(variant: Variant, size: Size, className?: string): string {
+  return cx(
+    "inline-flex items-center justify-center gap-2 font-medium transition",
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-from",
+    "disabled:cursor-not-allowed disabled:opacity-55",
+    variant === "link" ? "rounded-md px-1 py-1" : SIZES[size],
+    VARIANTS[variant],
+    className,
+  );
+}
+
 export function Button({ variant = "primary", size = "md", busy = false, disabled, className, children, type, ...rest }: ButtonProps) {
   return (
     <button
@@ -33,17 +44,24 @@ export function Button({ variant = "primary", size = "md", busy = false, disable
       type={type ?? "button"}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
-      className={cx(
-        "inline-flex items-center justify-center gap-2 font-medium transition",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-from",
-        "disabled:cursor-not-allowed disabled:opacity-55",
-        variant === "link" ? "rounded-md px-1 py-1" : SIZES[size],
-        VARIANTS[variant],
-        className,
-      )}
+      className={buttonClass(variant, size, className)}
     >
       {busy && <Spinner className="size-4" />}
       {children}
     </button>
+  );
+}
+
+export interface ButtonLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
+  variant?: Variant;
+  size?: Size;
+}
+
+/** A link that looks like a button, for actions that go to another page. */
+export function ButtonLink({ variant = "primary", size = "md", className, children, ...rest }: ButtonLinkProps) {
+  return (
+    <a {...rest} className={buttonClass(variant, size, className)}>
+      {children}
+    </a>
   );
 }

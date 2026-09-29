@@ -208,3 +208,37 @@ export function newSave<T>(link: ParsedLink, { source, now, savedAt, tags, note 
 export function tombstone<T>(now: T): Tombstone<T> {
   return { deleted: true, updatedAt: now, schemaVersion: SCHEMA_VERSION };
 }
+
+/**
+ * What saving a link does, given what's stored under its id: a missing or deleted save is
+ * created fresh, a trashed one comes back, and a live one is left alone ("Already saved").
+ */
+export type SavePlan = "create" | "restore" | "exists";
+
+export function planSave(stored: { deleted?: unknown; status?: unknown } | null | undefined): SavePlan {
+  if (!stored || stored.deleted === true) return "create";
+  return stored.status === "trashed" ? "restore" : "exists";
+}
+
+/** "Move to top": the save sorts as if it had just been saved. */
+export function moveToTop<T>(now: T): { savedAt: T; updatedAt: T } {
+  return { savedAt: now, updatedAt: now };
+}
+
+/** Takes a save out of the Trash. `remove` is Firestore's deleteField(). */
+export function restoreFromTrash<T, R>(now: T, remove: R): { status: "active"; trashedAt: R; updatedAt: T } {
+  return { status: "active", trashedAt: remove, updatedAt: now };
+}
+
+/** The profile document created the first time a verified account uses the app. */
+export function newUserDoc<T>({ email, displayName, now }: { email: string; displayName?: string | null; now: T }): UserDoc<T> {
+  const name = displayName?.trim().slice(0, LIMITS.displayName);
+  return {
+    email,
+    ...(name ? { displayName: name } : {}),
+    createdAt: now,
+    updatedAt: now,
+    settings: {},
+    schemaVersion: SCHEMA_VERSION,
+  };
+}

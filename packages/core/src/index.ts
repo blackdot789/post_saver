@@ -16,6 +16,10 @@ export {
   normalizeTags,
   newSave,
   tombstone,
+  planSave,
+  moveToTop,
+  restoreFromTrash,
+  newUserDoc,
 } from "./schema.ts";
 export type {
   SaveStatus,
@@ -30,5 +34,6 @@ export type {
   ImportDoc,
   AppConfig,
   NewSaveOptions,
+  SavePlan,
 } from "./schema.ts";
 export { parseStart } from "./platforms/youtube.ts";

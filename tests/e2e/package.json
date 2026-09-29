@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test:e2e": "pnpm --filter @postsaver/web exec vite build --mode e2e --outDir dist-e2e && firebase emulators:exec --config ../../firebase/firebase.json --only auth --project demo-post-saver 'playwright test'"
+    "test:e2e": "pnpm --filter @postsaver/web exec vite build --mode e2e --outDir dist-e2e && firebase emulators:exec --config ../../firebase/firebase.json --only auth,firestore --project demo-post-saver 'playwright test'"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
+    "@postsaver/core": "workspace:*",
     "@types/node": "^26.6.3",
     "firebase-tools": "^15.31.0"
   }
