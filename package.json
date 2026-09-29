@@ -12,11 +12,12 @@
     "typecheck": "pnpm -r typecheck && tsc -p scripts --noEmit",
     "test": "pnpm -r run test",
     "test:rules": "pnpm --filter @postsaver/firebase test:rules",
+    "test:e2e": "pnpm --filter @postsaver/e2e test:e2e",
     "check:domains": "tsx scripts/check-domains.ts",
     "brand": "tsx scripts/gen-brand.ts",
     "config:get": "tsx scripts/config-get.ts",
     "domain:apply": "tsx scripts/domain-apply.ts",
-    "verify": "pnpm check:domains && pnpm typecheck && pnpm test && pnpm test:rules && pnpm build"
+    "verify": "pnpm check:domains && pnpm typecheck && pnpm test && pnpm test:rules && pnpm test:e2e && pnpm build"
   },
   "devDependencies": {
     "@postsaver/config": "workspace:*",

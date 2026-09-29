@@ -3,6 +3,7 @@ packages:
   - packages/*
   - workers/*
   - firebase
+  - tests/*
 allowBuilds:
   esbuild: true
   workerd: true

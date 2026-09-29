@@ -17,8 +17,9 @@ This file is the **single source of truth for the whole project**: product, deci
   - **Phase 0 (foundations) is done.** The coming-soon landing is live at `https://<domain>`, the embed sandbox at `https://embed.<domain>`, and the Worker skeleton is live. CI and deploy are green.
   - `auth.<domain>` also serves the Firebase auth helpers over HTTPS.
   - **Phase 1, step 1 (the URL engine, `packages/core`) is done.**
-  - **Phase 1, step 2 (Firestore schema, rules, rules tests) is built and green:** 587 unit tests + 117 rules tests, all run in CI. The rules are **not deployed to Firebase yet**; both projects still have the deny-all rules until the owner approves the deploy.
-  - **Next: Phase 1, step 3: Auth** (§6.7, §9).
+  - **Phase 1, step 2 (Firestore schema, rules, rules tests) is done** and pushed (`039cbdc`). The owner deployed the rules and indexes to both projects (Claude's auto-mode safety check blocks `firebase deploy`, so the owner runs deploys); Claude verified that the live rules equal `firebase/firestore.rules`.
+  - **Phase 1, step 3 (sign-in) is done:** `/login/` + a minimal `/app/`, 42 web unit tests, 8 browser tests (Playwright + Auth emulator). Pushed; it goes live on `<domain>/login/`. Needs the owner's device test (§10).
+  - **Next: Phase 1, step 4: `saveLink()`, `/save/`, `/share/`** (§6.1, §9).
 - **The original plan file**, `~/.claude/plans/make-a-full-proof-vivid-rose.md`, exists only on the owner's Mac and is superseded by this file.
 
 ## 1. Working with the owner
@@ -65,11 +66,12 @@ pnpm install
 pnpm dev                                   # web app at http://localhost:5173
 pnpm --filter @postsaver/embed dev         # embed sandbox at http://localhost:5174
 pnpm build                                 # web + embed production builds
-pnpm verify                                # what CI runs: check:domains + typecheck + test + test:rules + build
+pnpm verify                                # what CI runs: check:domains + typecheck + test + test:rules + test:e2e + build
 pnpm check:domains                         # fail if domain/brand is hardcoded outside site.config.ts
 pnpm typecheck                             # all packages + scripts/
 pnpm test                                  # Vitest in every package that has a `test` script (packages/core)
 pnpm test:rules                            # Firestore rules tests: starts the emulator (Java 21), runs firebase/test
+pnpm test:e2e                              # browser tests: builds apps/web --mode e2e, starts the Auth emulator, runs Playwright (system Chrome)
 pnpm --filter @postsaver/core exec vitest  # URL engine tests in watch mode
 pnpm brand                                 # regenerate icons + OG image from brand/ (outputs committed)
 pnpm exec tsx scripts/config-get.ts hosts.embed   # print one config value (CI uses this)
@@ -81,7 +83,7 @@ cd firebase && firebase deploy --only hosting --project prod     # auth-subdomai
 cd firebase && firebase emulators:start    # Auth 9099, Firestore 8080, UI 4000 (Java 21 installed)
 ```
 
-**Vitest 5** runs the unit tests (`packages/core/test`) and the rules tests (`firebase/test`, with `@firebase/rules-unit-testing` inside `firebase emulators:exec`, project `demo-post-saver`, so no login is needed). There is **no linter yet**. Phase 1 still adds Playwright (e2e against the emulators) and ESLint/Prettier.
+**Vitest 5** runs the unit tests (`packages/core/test`) and the rules tests (`firebase/test`, with `@firebase/rules-unit-testing` inside `firebase emulators:exec`, project `demo-post-saver`, so no login is needed). **Playwright** runs the browser tests (`tests/e2e`) against a production build of the site made with `vite build --mode e2e` (`apps/web/.env.e2e`: project `demo-post-saver`, emulators on), so the pages and CSP are the real ones but nothing touches a real project. It uses the installed Chrome (`channel: "chrome"`; GitHub's Ubuntu runners have it too), so no browser download. There is **no linter yet**; ESLint/Prettier are still to come.
 
 **pnpm 12 quirks:**
 - There is no `-s` flag.
@@ -98,7 +100,7 @@ cd firebase && firebase emulators:start    # Auth 9099, Firestore 8080, UI 4000 
 site.config.ts        the ONLY place for domain, brand, contacts, GitHub repos, Worker URL, Firebase web configs
 packages/config/      typed access: index.ts (hosts/origins/firebaseConfig), html.ts (%TOKENS%, CSP), vite-plugin.ts
 packages/core/        URL engine: parse(), extractSharedUrl()/findUrls(), saveId(); fixture tests (Vitest)
-apps/web/             main site (static landing index.html + 404.html now; React /app/ etc. in Phase 1)
+apps/web/             main site: static landing + 404, React pages /login/ and /app/ (src/{auth,lib,ui,pages})
 apps/embed/           embed sandbox (placeholder: answers the parent via postMessage)
 workers/resolver/     Cloudflare Worker (Phase 0: /health + config-driven CORS)
 firebase/             firebase.json, .firebaserc (dev/prod aliases), firestore.rules + test/ (rules tests), indexes, hosting/
@@ -106,6 +108,7 @@ scripts/              check-domains, config-get, domain-apply, gen-brand (sharp)
 brand/                logo sources; apps/web/public/{favicon.svg,icons/*,og.png} are generated by `pnpm brand`
 docs/                 SETUP.md (accounts/tools/secrets), DOMAIN_CHANGE.md (runbook)
 .github/workflows/    ci.yml, deploy.yml (actions pinned by commit SHA; keep it that way)
+tests/e2e/            Playwright browser tests against the Firebase emulators
 ```
 
 ### 4.1 How config flows
@@ -115,7 +118,7 @@ docs/                 SETUP.md (accounts/tools/secrets), DOMAIN_CHANGE.md (runbo
   - `forbiddenLiterals()` feeds `check:domains`.
 - **`packages/config/src/html.ts`**
   - `%TOKEN%` values for HTML: `BRAND_NAME`, `BRAND_NAME_FIRST`/`BRAND_NAME_LAST` (the landing styles the last word with the gradient), `BRAND_TAGLINE`, `BRAND_DESCRIPTION`, `THEME_COLOR`, `APP_ORIGIN`, `APP_HOST`, `EMBED_ORIGIN`, `SUPPORT_EMAIL`, `YEAR`. An unknown token throws at build time.
-  - `mainSiteCsp()` builds the main-site CSP. **Add every new third-party origin here** (Firebase APIs, the Worker, Google sign-in, auth.<domain>).
+  - `mainSiteCsp({ emulators? })` builds the main-site CSP. **Add every new third-party origin here.** Now allowed: `script-src https://apis.google.com` (Firebase Auth's popup/redirect helper), `connect-src` identitytoolkit + securetoken, `frame-src` embed + auth origins. `emulators: true` (only for `--mode e2e` builds) adds `http://127.0.0.1:9099` and `:8080`.
 - **`packages/config/src/vite-plugin.ts`** (`siteConfigPlugin`), used by both apps:
   - Replaces tokens.
   - Writes brand CSS variables to `apps/*/src/generated/brand.css` (git-ignored). Tailwind `@theme` maps them to the `brand-from`, `brand-to` and `brand-ink` utilities.
@@ -136,8 +139,9 @@ docs/                 SETUP.md (accounts/tools/secrets), DOMAIN_CHANGE.md (runbo
 `ci.yml` runs on PRs and pushes, as two jobs:
 - `check`: `pnpm install --frozen-lockfile`, `check:domains`, `typecheck`, `test`, `build`.
 - `rules`: the same install plus Java 21 (`actions/setup-java`) and a cache of the emulator jar (`actions/cache`), then `test:rules`.
+- `e2e`: the same setup, then `test:e2e`; on failure it uploads Playwright traces (`actions/upload-artifact` v7.0.1, kept 7 days).
 
-Rules are **not** deployed by CI yet (that needs Workload Identity Federation); they're deployed by hand with `firebase deploy --only firestore`, and only when the rules tests are green.
+Rules are **not** deployed by CI yet (that needs Workload Identity Federation); the owner deploys them by hand with `firebase deploy --only firestore` (Claude's auto-mode safety check blocks Claude from running it), and only when the rules tests are green. Claude then checks the live ruleset against the file via the Firebase Rules API (`firebaserules.googleapis.com/v1/projects/<id>/releases/cloud.firestore` → the ruleset's `source`).
 
 ### 4.3 Structural rules
 - **Multi-page build, no SPA fallback.** GitHub Pages can't rewrite routes, so **every route is its own HTML entry** in `apps/web/vite.config.ts` → `build.rollupOptions.input`. Internal links are relative, with trailing slashes (`/save/`). State inside `/app/` goes in query params.
@@ -159,8 +163,8 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 | File | Purpose / key contents |
 |---|---|
 | `site.config.ts` | `export const site = {…} as const` + `interface FirebaseWebConfig`. Fields: `brand{name, shortName, tagline, description, colors{from,to,ink}}`, `domain`, `subdomains{www,embed,auth}`, `apiBaseUrl`, `contact{support,privacy}`, `github{owner, repos{web,embed,ops}}`, `firebase{dev,prod}` (apiKey, projectId, appId, messagingSenderId) |
-| `package.json` | `packageManager: pnpm@12.6.0`, `engines.node >=22.18`. Scripts: `dev`, `build`, `typecheck`, `test` (`pnpm -r run test`), `test:rules`, `check:domains`, `brand`, `config:get`, `domain:apply`, `verify`. devDeps: typescript ^7.0.2, tsx ^4.23, sharp ^0.35.4, @types/node ^26, `@postsaver/config` |
-| `pnpm-workspace.yaml` | `packages: apps/*, packages/*, workers/*, firebase`; `allowBuilds`: esbuild and workerd true; `@firebase/util`, protobufjs and re2 false |
+| `package.json` | `packageManager: pnpm@12.6.0`, `engines.node >=22.18`. Scripts: `dev`, `build`, `typecheck`, `test` (`pnpm -r run test`), `test:rules`, `test:e2e`, `check:domains`, `brand`, `config:get`, `domain:apply`, `verify`. devDeps: typescript ^7.0.2, tsx ^4.23, sharp ^0.35.4, @types/node ^26, `@postsaver/config` |
+| `pnpm-workspace.yaml` | `packages: apps/*, packages/*, workers/*, firebase, tests/*`; `allowBuilds`: esbuild and workerd true; `@firebase/util`, protobufjs and re2 false |
 | `tsconfig.base.json` | ES2022, `moduleResolution: Bundler`, `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, `allowImportingTsExtensions`, `noEmit`. Every package's `tsconfig.json` extends it |
 | `.nvmrc` | `24` (CI reads it) |
 | `.gitignore` | Notably `apps/*/src/generated/`, `dist/`, `.wrangler/`, `.dev.vars`, emulator logs, `*.pem`, `*_key`, `*_key.pub` |
@@ -174,7 +178,7 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 | File | Exports |
 |---|---|
 | `src/index.ts` | `site`, `type FirebaseWebConfig`, `type HostKey` (`"app" \| "www" \| "embed" \| "auth"`), `host(key)`, `origin(key)`, `hosts`, `origins`, `type FirebaseEnv`, `firebaseConfig(env)` (adds `authDomain`), `forbiddenLiterals()` (returns `[domain, brand.name]`) |
-| `src/html.ts` | `htmlTokens()` (token → value map; HTML-escaped on apply), `applyHtmlTokens(html, tokens?)` (replaces `%[A-Z_]+%`, throws on unknown), `mainSiteCsp()` (a directive map: `default/script/style/font/connect-src 'self'`, `img-src 'self' data:`, `frame-src <embed origin>`, `object-src 'none'`, `base-uri`/`form-action 'self'`) |
+| `src/html.ts` | `htmlTokens()` (token → value map; HTML-escaped on apply), `applyHtmlTokens(html, tokens?)` (replaces `%[A-Z_]+%`, throws on unknown), `mainSiteCsp({emulators?})` (a directive map: `default/style/font-src 'self'`; `script-src 'self' https://apis.google.com`; `img-src 'self' data:`; `connect-src 'self'` + identitytoolkit + securetoken (+ emulators); `frame-src` embed + auth origins; `object-src 'none'`; `base-uri`/`form-action 'self'`) |
 | `src/vite-plugin.ts` | `siteConfigPlugin({ csp?, brandCssPath?, files? })`. It uses `configResolved` (writes brand.css only when changed), `transformIndexHtml` (order `pre`, tokens + CSP meta when `!ctx.server`) and `generateBundle` (emits `files()` as assets) |
 
 **`packages/core/`**: the URL engine (§6.2). Pure TypeScript with no network access; runs in the browser, the Worker and Node. Exports map: `"."` → `src/index.ts`. Scripts: `typecheck`, `test` (`vitest run`). devDeps: vitest ^5.0.2.
@@ -194,17 +198,41 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 | `src/schema.ts` | The Firestore document shapes (§6.4): `SaveDoc<T>`, `Tombstone<T>`, `CollectionDoc<T>`, `UserDoc<T>`, `ImportDoc<T>`, `AppConfig` (`T` = timestamp type), plus `SCHEMA_VERSION` (1), `LIMITS`, the status enums, `SaveSource`, `STABLE_THUMB_PREFIX`. Helpers: `normalizeTag`/`normalizeTags`, **`newSave(link, {source, now, savedAt?, tags?, note?})`**, which builds the exact document the rules accept, and `tombstone(now)`. The app and the rules tests both use them |
 | `test/extract.test.ts` · `test/id.test.ts` · `test/schema.test.ts` | Share-text extraction cases · the SHA-256 test vector and "every form of the same post gives one id" · tag normalisation, `newSave`, `tombstone` |
 
-**`apps/web/`**: the main site. deps: react ^19.3, react-dom, @fontsource-variable/outfit. devDeps: vite ^8.3, @vitejs/plugin-react ^6.1, tailwindcss + @tailwindcss/vite ^4.3.
+**`apps/web/`**: the main site. deps: react ^19.3, react-dom, firebase ^12.19, @fontsource-variable/outfit. devDeps: vite ^8.3, @vitejs/plugin-react ^6.1, tailwindcss + @tailwindcss/vite ^4.3, vitest, `@postsaver/config` (imported by browser code too: `site`, `firebaseConfig`). Scripts: `dev`, `build`, `preview`, `typecheck`, `test`.
 
 | File | Purpose |
 |---|---|
-| `vite.config.ts` | Plugins `siteConfigPlugin` (csp = `mainSiteCsp`, brandCssPath = `src/generated/brand.css`, files = robots.txt / sitemap.xml / manifest.webmanifest), `react()` and `tailwindcss()`. `build.rollupOptions.input = { index, notFound: 404.html }`; **add each new route here** |
+| `vite.config.ts` | `defineConfig(({mode}) => …)`. Plugins `siteConfigPlugin` (csp = `mainSiteCsp({ emulators: mode === "e2e" })`, brandCssPath = `src/generated/brand.css`, files = robots.txt (disallows /app/, /login/, /save/, /share/) / sitemap.xml / manifest.webmanifest), `react()` and `tailwindcss()`. `build.rollupOptions.input = { index, notFound: 404.html, login, app }`; **add each new route here** |
+| `login/index.html` · `app/index.html` | Entry pages (noindex, favicons, manifest, styles.css, `<div id="root">`, a `<noscript>` note) loading `src/pages/{login,app}/main.tsx` |
+| `.env.e2e` | `VITE_FIREBASE_ENV=demo`, `VITE_EMULATORS=1`, for `--mode e2e` builds (committed, no secrets) |
+| `vitest.config.ts` | Unit tests `src/**/*.test.ts` (kept apart from vite.config so tests don't load the site plugins) |
 | `index.html` | Static coming-soon landing: blurred gradient blobs, mark, gradient brand name (`%BRAND_NAME_FIRST%` + `%BRAND_NAME_LAST%`), tagline, description, "Coming soon" pill, platform chips, 3-step cards, footer with `%SUPPORT_EMAIL%`. Head: canonical, favicons, manifest, OG/Twitter tags, `<link rel="stylesheet" href="/src/styles.css">` |
 | `404.html` | Served by GitHub Pages for unknown paths (noindex) |
-| `src/styles.css` | `@import "tailwindcss"`, the Outfit font and `./generated/brand.css`; `@theme inline` maps `--font-sans`, `--color-brand-from/to/ink`; `color-scheme: light dark` |
+| `src/styles.css` | `@import "tailwindcss"`, the Outfit font and `./generated/brand.css`; `@theme inline` maps `--font-sans`, `--color-brand-from/to/ink`, `--color-night` (#050b1c, dark background); `color-scheme: light dark` |
+| `src/vite-env.d.ts` | Types for `VITE_FIREBASE_ENV` ("dev"/"prod"/"demo") and `VITE_EMULATORS` |
+| `src/lib/firebase.ts` | `firebaseEnv` (prod in production builds, dev otherwise, or `VITE_FIREBASE_ENV`), `useEmulators`, `firebaseApp()` (lazy `initializeApp`; `demo` = an emulator-only config, project `demo-post-saver`) |
+| `src/lib/storage.ts` | `readLocal`/`writeLocal`: localStorage wrapped in try/catch, for conveniences only |
+| `src/auth/environment.ts` | Pure, unit-tested: `detectBrowser(ua, standalone)` → `{os, inApp, standalone}` (Instagram, Threads, Facebook, Messenger, TikTok, LinkedIn, Snapchat, Pinterest, LINE, WeChat, or an unnamed Android `; wv)` / iOS no-`Safari/` webview; an iOS home-screen app is not a webview). `googleFlow(env)` → popup / redirect (installed app) / blocked (in-app). `openInBrowserHref(url, os)` → Android intent to Chrome with a fallback URL, iOS `x-safari-https://…`. `IN_APP_NAMES`. `currentBrowser()` |
+| `src/auth/errors.ts` | `authErrorMessage(error)`: Firebase error code → plain sentence (a Map, so odd codes can't hit Object prototype keys); silent for closed popups; unknown codes show "(code)" for support |
+| `src/auth/next.ts` | `safeNext(raw)`: only same-site paths, never `/login/` (no open redirect, no loop); `loginUrl(next)` |
+| `src/auth/session.ts` | `getAuth()` (`initializeAuth` with IndexedDB → localStorage persistence, device language, emulator when `useEmulators`; **no popup resolver at init**, so pages without Google sign-in don't load Google's iframe script). `signInWithGoogle(env)` (popup; falls back to redirect if blocked; redirect in the installed app; a sessionStorage flag marks a pending redirect), `completeGoogleRedirect()`, `signUpWithEmail` (creates + sends verification), `signInWithEmail`, `sendVerification` (continue URL `/login/?verified=1`; records the send time for the 60 s cooldown), `sendPasswordReset` (treats user-not-found as success, so it never reveals accounts), `refreshVerified()` (reload + force-refresh the ID token so the `email_verified` claim the rules check is current), `signOut`, `MIN_PASSWORD_LENGTH` (8) |
+| `src/auth/useAuth.ts` | `useAuth()` → `loading` / `signed-out` / `unverified` / `ready` (from `onIdTokenChanged`) |
+| `src/auth/*.test.ts` | 42 unit tests: 20 real in-app/browser user agents, flows, open-in-browser links, messages, redirect safety |
+| `src/ui/` | First design components: `Button` (primary gradient / secondary / link; sizes md = full width 48 px tap target, sm; `busy` spinner), `TextField` + `PasswordField` (Show/Hide), `Alert` (info/success/warning/error; role alert or status), `Spinner` + `PageSpinner`, `AuthLayout` (card on the landing's gradient background) + `BrandLink`, `icons.tsx` (Google G, mail), `cx()`. Links use `text-blue-600` in light mode, because the brand blue is only about 3:1 on white |
+| `src/pages/login/` | `LoginPage` (modes signin / signup / reset; notices from `?verified`/`?reset`; redirects to `next` when ready), `VerifyEmail` ("Check your email": re-checks on focus, when the tab becomes visible and every 10 s for 30 min; resend with a 60 s cooldown re-read every second; "Use a different account"), `InAppNotice` (Open in Chrome/Safari + Copy link, with a manual-copy fallback), `main.tsx` |
+| `src/pages/app/` | `AppPage`: sends signed-out and unverified visitors to `/login/?next=…`; when ready shows a header (brand, email, Sign out) and "You're signed in". The library replaces the body in later steps |
 | `src/generated/brand.css` | **Generated, git-ignored**: `:root{--brand-from;--brand-to;--brand-ink}` |
 | `public/favicon.svg`, `public/icons/{favicon-32,apple-touch-icon,icon-192,icon-512,maskable-512}.png`, `public/icons/mark.svg`, `public/og.png` | **Generated by `pnpm brand`, committed**. Don't hand-edit |
-| `tsconfig.json` | `jsx: react-jsx`, types `vite/client` + `node`; includes `src` and `vite.config.ts` |
+| `tsconfig.json` | `jsx: react-jsx`, types `vite/client` + `node`; includes `src`, `vite.config.ts`, `vitest.config.ts` |
+
+**`tests/e2e/`**: `@postsaver/e2e`, Playwright browser tests. devDeps: @playwright/test ^1.63, firebase-tools ^15.31, @types/node.
+
+| File | Purpose |
+|---|---|
+| `package.json` | `test:e2e` = `vite build --mode e2e --outDir dist-e2e` (in apps/web), then `firebase emulators:exec --config ../../firebase/firebase.json --only auth --project demo-post-saver 'playwright test'`; `typecheck` |
+| `playwright.config.ts` | One worker, system Chrome, traces kept on failure, 1 retry on CI. `webServer` starts `./node_modules/.bin/vite preview` in apps/web **directly, not through pnpm**, because through pnpm Playwright couldn't stop it and the run hung |
+| `specs/emulator.ts` | Talks to the Auth emulator's REST API: `createUser(request, email, verified)` (admin `Bearer owner` to mark verified), `emailLink(request, email, type)` (the emulator's "sent" verify/reset links), `uniqueEmail`, `PASSWORD` |
+| `specs/auth.spec.ts` | Every test also fails on any CSP violation in the console. Covers: the CSP meta is present; sign-up → "Check your email" (cooldown running) → "not verified yet" → open the emailed link → `/app/`; an unverified sign-in asks to verify; wrong password; `/app/` → sign-in → back, then sign-out; `?next=//evil.example` lands on `/app/`; password reset looks the same for existing and unknown emails; inside Instagram's browser Google is disabled, "Open in Chrome" is an intent link, and email sign-in works |
 
 **`apps/embed/`**: the embed sandbox (Phase 0 placeholder). devDeps: vite, `@postsaver/config`.
 
@@ -526,6 +554,24 @@ Limits: 100k requests/day (resets 00:00 UTC), **10 ms CPU** per request, 50 subr
   - Saves are captured locally until the email is verified, then sync after `getIdToken(true)`.
 - **Re-authentication** before account deletion and save-key regeneration.
 - **Session:** IndexedDB persistence. On iPhone, the home-screen app and Safari keep separate sessions; the Shortcut needs none.
+
+**As built (2026-09-29)** (code map in §4.4: `apps/web/src/auth`, `src/pages/login`, `src/pages/app`, `tests/e2e`)
+- **Pages:** `/login/` (sign in, create account, reset password, "check your email") and a minimal `/app/` that proves sign-in end to end. Both are noindex and disallowed in robots.txt, and not linked from the landing yet.
+- **Which project:** production builds use prod (`authDomain` = `auth.<domain>`); `pnpm dev` uses dev (`post-saver-dev.firebaseapp.com`, where the popup works on localhost); `--mode e2e` uses the emulator-only `demo-post-saver`.
+- **Verified with the live config (local prod build + Chrome, 2026-09-29):**
+  - "Continue with Google" opens Google's sign-in with `redirect_uri=https://auth.<domain>/__/auth/handler` and **no error**, so the OAuth redirect URI is registered.
+  - No CSP violations.
+- **Email verification:**
+  - Firebase's own hosted action page applies the link, whose continue URL returns to `/login/?verified=1`.
+  - Once verified, the ID token is force-refreshed so the database rules see `email_verified`.
+  - The verify screen also notices verification done on another device.
+- **Password reset** never reveals whether an account exists (the app treats user-not-found as success; enumeration protection is also on in both projects).
+- **In-app browsers:** Google is disabled, with "Open in Chrome" (Android intent) / "Open in Safari" (iOS 17 `x-safari-https`) and Copy link. Email sign-in still works there. The Android intent and the iOS scheme are **untested on real devices** so far.
+- **Deliberately not yet:**
+  - Terms/privacy links on sign-up (the legal pages don't exist yet; add them before beta).
+  - A users/{uid} document (created with the first save in step 4/5).
+  - Re-authentication (with delete account, step 10).
+  - Clearing the local Firestore cache on sign-out (step 5).
 - **v1.1 extension:** `firebase/auth/web-extension` (SDK ≥10.8). Email/password runs directly; Google runs through an offscreen document that iframes `<domain>/ext-auth/`, which calls `signInWithPopup`. Add `chrome-extension://<id>` to the authorized domains.
 
 ### 6.8 Privacy, legal & platform terms
@@ -620,7 +666,7 @@ The domain is **verified** on the blackdot789 account (TXT `_github-pages-challe
 | | `post-saver-dev` (number 96165435237) | `post-saver-prod` (number 650431358172) |
 |---|---|---|
 | Web app id | `1:96165435237:web:6c02c349e9286d812cb38c` | `1:650431358172:web:8188bcd18fcfa9f3350019` |
-| Firestore | `(default)`, `nam5`, native mode; deny-all rules deployed | same |
+| Firestore | `(default)`, `nam5`, native mode; the v1 rules + index overrides from `firebase/` are live (deployed by the owner 2026-09-29, verified identical to the repo) | same |
 | Auth | Google + Email/Password on; enumeration protection on | same; **authorized domains** include `<domain>`, `www.<domain>`, `auth.<domain>` |
 | Hosting | — | site `post-saver-prod.web.app` serving `firebase/hosting/` (auth helpers only); custom domain `auth.<domain>` is **active** (CNAME live; `/__/auth/handler` returns 200 over HTTPS; the cert was propagating on 2026-09-27) |
 | Browser API key | restricted to 5 APIs (§6.9) | same |
@@ -629,7 +675,8 @@ The web configs (apiKey, projectId, appId, messagingSenderId) are in `site.confi
 
 **OAuth (Google Auth Platform, prod):**
 - The owner set Branding (app name, support email, authorized domain) **without a logo**, because a logo triggers a Google review. The logo and privacy/terms links get added before launch.
-- The owner was asked to add redirect URI `https://auth.<domain>/__/auth/handler` to "Web client (auto created by Google Service)". **This hasn't been verified**; confirm it when sign-in is first tested.
+- Redirect URI `https://auth.<domain>/__/auth/handler` on "Web client (auto created by Google Service)": **verified 2026-09-29** (Google's sign-in page accepted it from a local prod build).
+- **Publishing status** (Google Auth Platform → Audience): **In production** in both projects (checked by the owner 2026-09-29), so anyone with a Google account can sign in.
 
 ### 8.3 Cloudflare (owner `kerdostack@gmail.com`)
 - Account id `d6243ded1f47348d69121fdc54c4fc01` (in `workers/resolver/wrangler.jsonc`).
@@ -677,8 +724,8 @@ Hostinger's original parking records (A @ → 147.79.69.170 / 91.108.106.12, CNA
 
 ### Phase 1: v1.0 MVP (next)
 1. [x] `packages/core` URL engine + fixture suite (§6.2) (2026-09-29)
-2. [x] Firestore schema, rules and the rules test suite (§6.4) (2026-09-29; **deploy to both projects pending the owner's OK**)
-3. [ ] Auth: popup/redirect by context, email verification, in-app-browser handling (§6.7)
+2. [x] Firestore schema, rules and the rules test suite (§6.4) (2026-09-29; deployed to both projects)
+3. [x] Auth: popup/redirect by context, email verification, in-app-browser handling (§6.7) (2026-09-29; **the owner's device test pending**)
 4. [ ] `saveLink()`, `/save/`, `/share/`, offline queue, dedupe, pending/synced states (§6.1)
 5. [ ] Sync engine + status UI (§6.5)
 6. [ ] Embed sandbox renderers + host component + fallbacks + preview consent (§6.6)
@@ -724,7 +771,13 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
    - Check the Firebase Hosting custom-domain status with:
      `curl -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "x-goog-user-project: post-saver-prod" https://firebasehosting.googleapis.com/v1beta1/projects/post-saver-prod/sites/post-saver-prod/customDomains`
    - Expect `hostState` HOST_ACTIVE and the cert active.
-2. When sign-in is first tested, confirm the OAuth redirect URI (§8.2).
+2. **Device test of sign-in** on `https://<domain>/login/`, on the OnePlus (Chrome) and desktop Chrome:
+   - Create an account with email; get the email; open the link; land in the library.
+   - Sign out, then sign in with Google.
+   - Send yourself the `/login/` link in an Instagram DM, open it inside Instagram, and check the "Open in Chrome" button.
+
+**Deploying Firestore rules/indexes (owner, whenever a step changes `firebase/`):** Claude's auto-mode safety check blocks `firebase deploy`, so the owner runs this in the VS Code terminal, from the repo folder, and Claude verifies the result:
+`cd firebase && pnpm exec firebase deploy --only firestore --project dev && pnpm exec firebase deploy --only firestore --project prod`
 
 **Before launch (owner):**
 - Final domain + brand.
@@ -759,8 +812,8 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
   - Instagram export parser
   - config generators: switching `domain` in a test config changes the CSP, manifest, CORS, sitemap and legal pages
 - `pnpm test:rules`: every rule case in §6.4.
-- `pnpm e2e` (Playwright + emulators):
-  1. Email sign-up → blocked until verified → verify → the pending save syncs.
+- `pnpm test:e2e` (Playwright + emulators). Built so far: the sign-in suite (§4.4 `tests/e2e`). Still to come:
+  1. Email sign-up → blocked until verified → verify → the pending save syncs. (The sign-up/verify part is done; the pending-save part comes with step 4.)
   2. `/share/?text=<IG link with igsh>` → canonical id; sharing again → "Already saved".
   3. Offline save → reload → online → it appears in a second browser context.
   4. Trash → restore → delete → the tombstone propagates; a wiped cache triggers a full resync.
@@ -812,3 +865,16 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
   - **pnpm policies met:**
     - firebase-tools 15.32.0 was blocked by pnpm's minimum-release-age guard, so we use 15.31.0.
     - Three unneeded install scripts are denied.
+  - Pushed as `039cbdc`; CI (check + rules) and Deploy green. Claude's auto-mode safety check refused `firebase deploy`, so the owner deployed the rules and indexes to both projects themselves; Claude verified that both live rulesets equal the repo file and the index overrides match.
+- **2026-09-29:** Phase 1, step 3: sign-in.
+  - **Pages:** `/login/` (Google + email/password, verification, reset, in-app browser handling) and a minimal `/app/`, plus the first design components in `apps/web/src/ui`.
+  - **CSP:** now allows Google's sign-in helper script and Firebase's auth endpoints.
+  - **Tests:**
+    - Vitest in apps/web: 42 unit tests.
+    - New `tests/e2e` Playwright suite: 8 browser tests against the Auth emulator on a real production build, failing on any CSP violation.
+    - CI gets an `e2e` job.
+  - **Bugs caught by the browser tests before shipping:**
+    - The resend cooldown never started right after sign-up.
+    - Password reset for an unknown email showed a wrong-password message, which also revealed that no account existed.
+  - **Also fixed:** light-mode links were too faint (about 3:1 contrast), and the Playwright run hung because the preview server started through pnpm couldn't be stopped.
+  - **Verified live:** the OAuth redirect URI (Google's sign-in page loads with it), and no CSP violations with the prod config. The owner confirmed Google sign-in's publishing status is "In production" in both projects.

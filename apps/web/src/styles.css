@@ -7,6 +7,8 @@
   --color-brand-from: var(--brand-from);
   --color-brand-to: var(--brand-to);
   --color-brand-ink: var(--brand-ink);
+  /* Page background in dark mode. */
+  --color-night: #050b1c;
 }
 
 @layer base {

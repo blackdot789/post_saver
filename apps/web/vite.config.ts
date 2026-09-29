@@ -8,13 +8,14 @@ import { siteConfigPlugin } from "@postsaver/config/vite-plugin";
 
 const here = (p: string) => resolve(import.meta.dirname, p);
 
-export default defineConfig({
+// `--mode e2e` builds against the local Firebase emulators (see .env.e2e and tests/e2e).
+export default defineConfig(({ mode }) => ({
   plugins: [
     siteConfigPlugin({
-      csp: mainSiteCsp,
+      csp: () => mainSiteCsp({ emulators: mode === "e2e" }),
       brandCssPath: here("src/generated/brand.css"),
       files: () => ({
-        "robots.txt": `User-agent: *\nAllow: /\nDisallow: /app/\nDisallow: /save/\nDisallow: /share/\n\nSitemap: ${origins.app}/sitemap.xml\n`,
+        "robots.txt": `User-agent: *\nAllow: /\nDisallow: /app/\nDisallow: /login/\nDisallow: /save/\nDisallow: /share/\n\nSitemap: ${origins.app}/sitemap.xml\n`,
         "sitemap.xml": `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${origins.app}/</loc></url>\n</urlset>\n`,
         "manifest.webmanifest": JSON.stringify(
           {
@@ -45,7 +46,9 @@ export default defineConfig({
       input: {
         index: here("index.html"),
         notFound: here("404.html"),
+        login: here("login/index.html"),
+        app: here("app/index.html"),
       },
     },
   },
-});
+}));

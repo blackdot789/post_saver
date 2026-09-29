@@ -1,0 +1,15 @@
+{
+  "name": "@postsaver/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "pnpm --filter @postsaver/web exec vite build --mode e2e --outDir dist-e2e && firebase emulators:exec --config ../../firebase/firebase.json --only auth --project demo-post-saver 'playwright test'"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.3",
+    "firebase-tools": "^15.31.0"
+  }
+}

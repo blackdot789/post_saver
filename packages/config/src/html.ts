@@ -39,16 +39,28 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+export interface CspOptions {
+  /** Allow the local Firebase emulators (end-to-end test builds only). */
+  emulators?: boolean;
+}
+
 /** Content-Security-Policy for the main site, derived from config. Extended as features land. */
-export function mainSiteCsp(): string {
+export function mainSiteCsp({ emulators = false }: CspOptions = {}): string {
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
-    "script-src": ["'self'"],
+    // Firebase Auth's popup/redirect sign-in loads Google's iframe helper script.
+    "script-src": ["'self'", "https://apis.google.com"],
     "style-src": ["'self'"],
     "img-src": ["'self'", "data:"],
     "font-src": ["'self'"],
-    "connect-src": ["'self'"],
-    "frame-src": [origins.embed],
+    "connect-src": [
+      "'self'",
+      "https://identitytoolkit.googleapis.com",
+      "https://securetoken.googleapis.com",
+      ...(emulators ? ["http://127.0.0.1:9099", "http://127.0.0.1:8080"] : []),
+    ],
+    // The embed sandbox, and the sign-in helper frame on auth.<domain>.
+    "frame-src": [origins.embed, origins.auth],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
     "form-action": ["'self'"],
