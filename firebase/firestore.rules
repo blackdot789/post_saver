@@ -1,10 +1,258 @@
 rules_version = '2';
 
-// Phase 0: everything is denied. Real, tested rules arrive with the data model in Phase 1.
+// Firestore security rules: the only gatekeeper for user data (CLAUDE.md §6.4, §6.9).
+// Anything not matched below is denied, including the v1.2 inbox paths (inboxTokens, inbox).
+// Tests: firebase/test/rules.test.ts (`pnpm test:rules`). They also check that platforms() and
+// kinds() match packages/core. Deploy only when the tests are green, and keep every change
+// backward compatible with the app that's live.
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+
+    // ---------- who ----------
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // Writes need a verified email, so throwaway sign-ups can't spend the shared daily quota.
+    function isVerifiedOwner(uid) {
+      return isOwner(uid) && request.auth.token.email_verified == true;
+    }
+
+    // ---------- values ----------
+
+    function platforms() {
+      return ['instagram', 'x', 'tiktok', 'youtube', 'reddit', 'facebook', 'linkedin', 'threads', 'pinterest', 'bluesky', 'web'];
+    }
+
+    function kinds() {
+      return ['post', 'reel', 'video', 'short', 'live', 'photo', 'pin', 'comment', 'story', 'profile', 'community', 'playlist', 'article', 'link'];
+    }
+
+    function isString(v, min, max) {
+      return v is string && v.size() >= min && v.size() <= max;
+    }
+
+    // Optional string field: absent, or a string of at most `max` characters.
+    function optString(d, key, max) {
+      return isString(d.get(key, ''), 0, max);
+    }
+
+    function optTimestamp(d, key) {
+      return d.get(key, request.time) is timestamp;
+    }
+
+    function isHttpUrl(v) {
+      return isString(v, 10, 2048) && v.matches('^https?://[^ ]+$');
+    }
+
+    // Rules can't loop over a list, so it's joined with commas and checked with one pattern.
+    // hasOnly(split) holds only when every element is a string without a comma (join alone
+    // would turn 42 into "42", and hide a comma inside one element).
+    function isJoinedList(v, max, piece) {
+      return v is list && v.size() <= max
+        && (v.size() == 0
+            || (v.hasOnly(v.join(',').split(','))
+                && v.join(',').matches('^' + piece + '(,' + piece + ')*$')));
+    }
+
+    // Tags: at most 30, each 1-40 characters, no commas, no capital letters.
+    function isTagList(v) {
+      return isJoinedList(v, 30, '[^,A-Z]{1,40}');
+    }
+
+    function isIdList(v, max) {
+      return isJoinedList(v, max, '[A-Za-z0-9]{1,40}');
+    }
+
+    // What a deleted save or collection becomes, so other devices learn about the delete.
+    function isTombstone(d) {
+      return d.keys().hasOnly(['deleted', 'updatedAt', 'schemaVersion'])
+        && d.keys().hasAll(['deleted', 'updatedAt'])
+        && d.deleted == true
+        && d.updatedAt == request.time
+        && d.get('schemaVersion', 1) is int;
+    }
+
+    function wasDeleted() {
+      return resource.data.get('deleted', false) == true;
+    }
+
+    // Hard deletes: tombstones old enough that every device has seen them (devices do a full
+    // resync after 45 days away, tombstones live 60), or anything while the account is being
+    // deleted.
+    function canHardDelete(uid) {
+      return (wasDeleted() && resource.data.updatedAt < request.time - duration.value(60, 'd'))
+        || get(/databases/$(database)/documents/users/$(uid)).data.get('deleting', false) == true;
+    }
+
+    // ---------- saves ----------
+
+    function saveFields() {
+      return ['url', 'originalUrl', 'platform', 'kind', 'platformId', 'author', 'title', 'thumb', 'note',
+              'tags', 'collectionIds', 'favorite', 'status', 'trashedAt', 'deleted', 'source', 'savedAt',
+              'createdAt', 'updatedAt', 'embedStatus', 'embedCheckedAt', 'needsResolve', 'needsMeta',
+              'schemaVersion'];
+    }
+
+    function saveRequired() {
+      return ['url', 'originalUrl', 'platform', 'kind', 'platformId', 'tags', 'collectionIds', 'favorite',
+              'status', 'deleted', 'source', 'savedAt', 'createdAt', 'updatedAt', 'embedStatus',
+              'needsResolve', 'needsMeta', 'schemaVersion'];
+    }
+
+    // Fields an edit may change. The link and its identity never change: a resolved short
+    // link becomes a new document instead.
+    function saveEditable() {
+      return ['author', 'title', 'thumb', 'note', 'tags', 'collectionIds', 'favorite', 'status', 'trashedAt',
+              'savedAt', 'updatedAt', 'embedStatus', 'embedCheckedAt', 'needsResolve', 'needsMeta',
+              'schemaVersion'];
+    }
+
+    function isSave(d) {
+      return d.keys().hasOnly(saveFields()) && d.keys().hasAll(saveRequired())
+        && isHttpUrl(d.url) && isHttpUrl(d.originalUrl)
+        && d.platform in platforms() && d.kind in kinds()
+        && (d.platformId == null || isString(d.platformId, 1, 300))
+        && optString(d, 'author', 100) && optString(d, 'title', 500) && optString(d, 'note', 5000)
+        // Only thumbnails whose URLs don't expire.
+        && d.get('thumb', 'https://i.ytimg.com/').matches('^https://i[.]ytimg[.]com/[^ ]{0,300}$')
+        && isTagList(d.tags) && isIdList(d.collectionIds, 50)
+        && d.favorite is bool
+        && (d.status == 'active' || (d.status == 'trashed' && d.get('trashedAt', null) is timestamp))
+        && optTimestamp(d, 'trashedAt')
+        && d.deleted == false
+        && d.source is string
+        && d.source.matches('^(web|share-android|ios-shortcut|bookmarklet|paste|extension|import-[a-z]{1,20}|sync-[a-z]{1,20})$')
+        // Imports carry old dates; an hour of slack covers device clocks on offline saves.
+        && d.savedAt is timestamp && d.savedAt < request.time + duration.value(1, 'h')
+        && d.createdAt is timestamp
+        && d.updatedAt == request.time
+        && d.embedStatus in ['ok', 'unavailable', 'unknown']
+        && optTimestamp(d, 'embedCheckedAt')
+        && d.needsResolve is bool && d.needsMeta is bool
+        && d.schemaVersion is int && d.schemaVersion >= 1 && d.schemaVersion <= 1000;
+    }
+
+    function isSaveIdFormat(id) {
+      return id.matches('^(url_[0-9a-f]{24}|[a-z]+_[A-Za-z0-9_.:~-]{1,300})$');
+    }
+
+    // The id comes from the link (saveId in packages/core), so the same post saved twice, from
+    // any device, is always the same document.
+    function isSaveIdFor(id, d) {
+      let byPlatform = d.platform != 'web' && d.platformId is string
+        && d.platformId.matches('^[A-Za-z0-9_.:~-]{1,300}$');
+      return byPlatform
+        ? id == d.platform + '_' + d.platformId
+        : id.matches('^url_[0-9a-f]{24}$')
+          && ('url_' + hashing.sha256(d.url).toHexString().lower()).matches(id + '[0-9a-f]*');
+    }
+
+    function isNewSave(id, d) {
+      return isSave(d) && d.createdAt == request.time && isSaveIdFor(id, d);
+    }
+
+    // ---------- collections ----------
+
+    function isCollection(d) {
+      return d.keys().hasOnly(['name', 'emoji', 'color', 'order', 'createdAt', 'updatedAt', 'deleted'])
+        && d.keys().hasAll(['name', 'order', 'createdAt', 'updatedAt', 'deleted'])
+        && isString(d.name, 1, 60) && optString(d, 'emoji', 16)
+        && d.get('color', '#000000').matches('^#[0-9a-fA-F]{6}$')
+        && d.order is number
+        && d.createdAt is timestamp && d.updatedAt == request.time
+        && d.deleted == false;
+    }
+
+    // ---------- imports ----------
+
+    function isImport(d) {
+      return d.keys().hasOnly(['type', 'total', 'done', 'cursor', 'status', 'error', 'createdAt', 'updatedAt'])
+        && d.keys().hasAll(['type', 'total', 'done', 'cursor', 'status', 'createdAt', 'updatedAt'])
+        && d.type is string && d.type.matches('^[a-z][a-z-]{0,29}$')
+        && d.total is int && d.total >= 0 && d.total <= 100000
+        && d.done is int && d.done >= 0 && d.done <= d.total
+        && d.cursor is int && d.cursor >= 0
+        && d.status in ['running', 'paused', 'done', 'failed', 'cancelled']
+        && optString(d, 'error', 500)
+        && d.createdAt is timestamp && d.updatedAt == request.time;
+    }
+
+    // ---------- user profile ----------
+
+    function isSettings(s) {
+      return s is map && s.keys().hasOnly(['view', 'theme', 'previews', 'onUnsave'])
+        && s.get('view', 'grid') in ['grid', 'list']
+        && s.get('theme', 'system') in ['system', 'light', 'dark']
+        && s.get('previews', 'ask') in ['ask', 'always', 'click']
+        && s.get('onUnsave', 'keep') in ['remove', 'keep'];
+    }
+
+    function isUser(d) {
+      return d.keys().hasOnly(['email', 'displayName', 'createdAt', 'updatedAt', 'settings', 'schemaVersion',
+                               'syncEpoch', 'deleting'])
+        && d.keys().hasAll(['email', 'createdAt', 'updatedAt', 'settings', 'schemaVersion'])
+        && d.email == request.auth.token.email
+        && optString(d, 'displayName', 100)
+        && isSettings(d.settings)
+        && d.createdAt is timestamp && d.updatedAt == request.time
+        && d.schemaVersion is int && d.schemaVersion >= 1 && d.schemaVersion <= 1000
+        && d.get('syncEpoch', 0) is int
+        && d.get('deleting', false) is bool;
+    }
+
+    // ---------- paths ----------
+
+    // Remote switches (maintenance, notices, kill switches). Written only by admin jobs.
+    match /config/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      allow create: if isVerifiedOwner(uid) && isUser(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if isVerifiedOwner(uid) && isUser(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isVerifiedOwner(uid);
+
+      match /saves/{saveId} {
+        allow read: if isOwner(uid);
+        allow create: if isVerifiedOwner(uid) && isSaveIdFormat(saveId)
+          && (isTombstone(request.resource.data) || isNewSave(saveId, request.resource.data));
+        allow update: if isVerifiedOwner(uid) && (
+          isTombstone(request.resource.data)
+          // Saving a deleted post again starts it fresh.
+          || (wasDeleted() && isNewSave(saveId, request.resource.data))
+          || (!wasDeleted() && isSave(request.resource.data)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(saveEditable())));
+        allow delete: if isVerifiedOwner(uid) && canHardDelete(uid);
+      }
+
+      match /collections/{cid} {
+        allow read: if isOwner(uid);
+        allow create: if isVerifiedOwner(uid) && cid.matches('^[A-Za-z0-9]{1,40}$')
+          && (isTombstone(request.resource.data)
+              || (isCollection(request.resource.data) && request.resource.data.createdAt == request.time));
+        allow update: if isVerifiedOwner(uid) && (
+          isTombstone(request.resource.data)
+          || (isCollection(request.resource.data)
+              && request.resource.data.createdAt == (wasDeleted() ? request.time : resource.data.createdAt)));
+        allow delete: if isVerifiedOwner(uid) && canHardDelete(uid);
+      }
+
+      match /imports/{jobId} {
+        allow read: if isOwner(uid);
+        allow create: if isVerifiedOwner(uid) && jobId.matches('^[A-Za-z0-9]{1,40}$')
+          && isImport(request.resource.data) && request.resource.data.createdAt == request.time;
+        allow update: if isVerifiedOwner(uid) && isImport(request.resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['total', 'done', 'cursor', 'status', 'error', 'updatedAt']);
+        allow delete: if isVerifiedOwner(uid);
+      }
     }
   }
 }

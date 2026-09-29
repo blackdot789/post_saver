@@ -1,4 +1,20 @@
 {
   "indexes": [],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    { "collectionGroup": "saves", "fieldPath": "note", "indexes": [] },
+    { "collectionGroup": "saves", "fieldPath": "title", "indexes": [] },
+    { "collectionGroup": "saves", "fieldPath": "thumb", "indexes": [] },
+    { "collectionGroup": "saves", "fieldPath": "originalUrl", "indexes": [] },
+    { "collectionGroup": "saves", "fieldPath": "onPlatform", "indexes": [] },
+    { "collectionGroup": "items", "fieldPath": "text", "indexes": [] },
+    {
+      "collectionGroup": "saves",
+      "fieldPath": "updatedAt",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
 }

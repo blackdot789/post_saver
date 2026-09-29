@@ -11,11 +11,12 @@
     "build": "pnpm --filter @postsaver/web --filter @postsaver/embed build",
     "typecheck": "pnpm -r typecheck && tsc -p scripts --noEmit",
     "test": "pnpm -r run test",
+    "test:rules": "pnpm --filter @postsaver/firebase test:rules",
     "check:domains": "tsx scripts/check-domains.ts",
     "brand": "tsx scripts/gen-brand.ts",
     "config:get": "tsx scripts/config-get.ts",
     "domain:apply": "tsx scripts/domain-apply.ts",
-    "verify": "pnpm check:domains && pnpm typecheck && pnpm test && pnpm build"
+    "verify": "pnpm check:domains && pnpm typecheck && pnpm test && pnpm test:rules && pnpm build"
   },
   "devDependencies": {
     "@postsaver/config": "workspace:*",

@@ -1,0 +1,18 @@
+{
+  "name": "@postsaver/firebase",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-post-saver 'vitest run'"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "@postsaver/core": "workspace:*",
+    "@types/node": "^26.6.3",
+    "firebase": "^12.19.0",
+    "firebase-tools": "^15.31.0",
+    "vitest": "^5.0.2"
+  }
+}
