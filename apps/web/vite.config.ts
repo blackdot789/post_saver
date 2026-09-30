@@ -7,6 +7,7 @@ import { mainSiteCsp } from "@postsaver/config/html";
 import { siteConfigPlugin } from "@postsaver/config/vite-plugin";
 
 const here = (p: string) => resolve(import.meta.dirname, p);
+const e2eEnv = (mode: string) => loadEnv(mode, import.meta.dirname, "VITE_");
 
 // `--mode e2e` builds against the local Firebase emulators (see .env.e2e and tests/e2e).
 export default defineConfig(({ mode }) => ({
@@ -15,7 +16,7 @@ export default defineConfig(({ mode }) => ({
       csp: () =>
         mainSiteCsp({
           emulators: mode === "e2e",
-          ...(mode === "e2e" ? { embedOrigin: loadEnv(mode, import.meta.dirname, "VITE_").VITE_EMBED_ORIGIN } : {}),
+          ...(mode === "e2e" ? { embedOrigin: e2eEnv(mode).VITE_EMBED_ORIGIN, apiBaseUrl: e2eEnv(mode).VITE_API_BASE_URL } : {}),
         }),
       brandCssPath: here("src/generated/brand.css"),
       files: () => ({

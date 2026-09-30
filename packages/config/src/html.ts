@@ -44,10 +44,12 @@ export interface CspOptions {
   emulators?: boolean;
   /** Where the embed sandbox is served from, when not embed.<domain> (end-to-end test builds only). */
   embedOrigin?: string;
+  /** Where the resolver Worker is, when not `site.apiBaseUrl` (end-to-end test builds only). */
+  apiBaseUrl?: string;
 }
 
 /** Content-Security-Policy for the main site, derived from config. Extended as features land. */
-export function mainSiteCsp({ emulators = false, embedOrigin = origins.embed }: CspOptions = {}): string {
+export function mainSiteCsp({ emulators = false, embedOrigin = origins.embed, apiBaseUrl = site.apiBaseUrl }: CspOptions = {}): string {
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
     // Firebase Auth's popup/redirect sign-in loads Google's iframe helper script.
@@ -63,6 +65,9 @@ export function mainSiteCsp({ emulators = false, embedOrigin = origins.embed }: 
       "https://securetoken.googleapis.com",
       // The database (the SDK's WebChannel/long-polling connection).
       "https://firestore.googleapis.com",
+      // The resolver Worker (short links, titles), and Bluesky's public API for handle → DID.
+      new URL(apiBaseUrl).origin,
+      "https://public.api.bsky.app",
       ...(emulators ? ["http://127.0.0.1:9099", "http://127.0.0.1:8080"] : []),
     ],
     // The embed sandbox, and the sign-in helper frame on auth.<domain>.

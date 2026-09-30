@@ -301,6 +301,10 @@ importers:
         version: 15.31.0(@types/node@26.6.3)(supports-color@10.2.2)
 
   workers/resolver:
+    dependencies:
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.12
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^5.20260926.1
@@ -308,6 +312,12 @@ importers:
       '@postsaver/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@postsaver/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      vitest:
+        specifier: ^5.0.2
+        version: 5.0.2(@opentelemetry/api@1.9.1)(@types/node@26.6.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
       wrangler:
         specifier: ^4.141.0
         version: 4.141.0(@cloudflare/workers-types@5.20260926.1)(@types/node@26.6.3)

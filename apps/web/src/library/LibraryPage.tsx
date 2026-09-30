@@ -8,6 +8,7 @@ import { deleteSave, hardDeleteSave, restoreSave, setEmbedStatus, setFavorite, t
 import { clearLocalData } from "../data/firestore.ts";
 import { ensureProfile } from "../data/profile.ts";
 import { applyTheme, defaultPreviews, useSettings } from "../data/settings.ts";
+import { useEnrichment } from "../enrich/run.ts";
 import { errorMessage } from "../pages/save/messages.ts";
 import { SyncStatus } from "../pages/app/SyncStatus.tsx";
 import type { LibrarySave } from "../sync/library.ts";
@@ -96,6 +97,7 @@ export function LibraryPage({ user }: { user: User }) {
   const [caughtUp, setCaughtUp] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
   const theme = useResolvedTheme(settings.theme);
+  useEnrichment(uid, library);
 
   useEffect(() => applyTheme(settings.theme), [settings.theme]);
 

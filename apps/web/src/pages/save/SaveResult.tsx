@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ParsedLink, SaveSource } from "@postsaver/core";
 import { moveSaveToTop } from "../../data/edits.ts";
+import { enrichSaved } from "../../enrich/run.ts";
 import { useSave, type SaveState } from "../../capture/useSave.ts";
 import { describeLink, formatDay } from "../../lib/platforms.ts";
 import { useOnline } from "../../lib/useOnline.ts";
@@ -78,6 +79,12 @@ export function SaveResult({ uid, link, source, onStored, autoClose = false, com
     const timer = setTimeout(() => window.close(), CLOSE_AFTER_MS);
     return () => clearTimeout(timer);
   }, [closing]);
+
+  // Once the server has the save, look up its title (and open a short link) without holding anything up.
+  const saved = state.sync === "synced" ? state.id : undefined;
+  useEffect(() => {
+    if (saved) void enrichSaved(uid, saved);
+  }, [uid, saved]);
 
   function moveToTop() {
     if (!state.id) return;

@@ -44,6 +44,13 @@ export type SaveSource =
 /** Thumbnails are stored only from hosts whose image URLs don't expire. */
 export const STABLE_THUMB_PREFIX = "https://i.ytimg.com/";
 
+/**
+ * Platforms the resolver Worker can get a title or author for (an open oEmbed endpoint, a
+ * public API, or the page's own tags). The others (Instagram, Facebook, Threads, LinkedIn)
+ * offer nothing without a login, so their saves never wait for metadata.
+ */
+export const META_PLATFORMS: ReadonlySet<Platform> = new Set<Platform>(["youtube", "x", "tiktok", "reddit", "pinterest", "bluesky", "web"]);
+
 /** `/users/{uid}/saves/{saveId}`. `T` is the timestamp type (Firestore Timestamp or a server-time sentinel). */
 export interface SaveDoc<T> {
   url: string;
@@ -199,7 +206,7 @@ export function newSave<T>(link: ParsedLink, { source, now, savedAt, tags, note 
     updatedAt: now,
     embedStatus: "unknown",
     needsResolve: link.needsResolve,
-    needsMeta: true,
+    needsMeta: META_PLATFORMS.has(link.platform),
     schemaVersion: SCHEMA_VERSION,
   };
 }

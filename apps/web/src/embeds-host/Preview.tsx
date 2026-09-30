@@ -41,6 +41,15 @@ const REASONS: Record<Exclude<FrameStatus, "loading" | "ok">, string> = {
   timeout: "The preview didn't load in time.",
 };
 
+/**
+ * Where a save's title goes. These platforms' players don't show one, so the card prints it
+ * under the preview; every other embed shows the post's own text, so the title appears only
+ * when there's a link card instead of the embed.
+ */
+export function titleBelow(platform: Platform): boolean {
+  return platform === "youtube" || platform === "tiktok";
+}
+
 const embeds = new Map<string, Embed | null>();
 
 /** The embed for a saved link, or null for a link card. Parsed once per link. */
@@ -138,16 +147,18 @@ export function Preview({ save, theme, mode, disabledPlatforms, onVerdict }: Pre
     </Button>
   );
 
-  if (!embed) return <LinkCard url={save.url} platform={save.platform} />;
+  const title = titleBelow(save.platform) ? undefined : save.title;
+  if (!embed) return <LinkCard url={save.url} platform={save.platform} title={title} />;
   if (disabledPlatforms.includes(save.platform)) {
-    return <LinkCard url={save.url} platform={save.platform} reason={`Previews from ${PLATFORM_NAMES[save.platform]} are turned off for now.`} />;
+    return <LinkCard url={save.url} platform={save.platform} title={title} reason={`Previews from ${PLATFORM_NAMES[save.platform]} are turned off for now.`} />;
   }
-  if (knownGone(save) && attempt === 0) return <LinkCard url={save.url} platform={save.platform} reason={REASONS.unavailable} action={retry} />;
+  if (knownGone(save) && attempt === 0) return <LinkCard url={save.url} platform={save.platform} title={title} reason={REASONS.unavailable} action={retry} />;
   if (!wanted) {
     return (
       <LinkCard
         url={save.url}
         platform={save.platform}
+        title={title}
         action={
           <Button variant="secondary" size="sm" onClick={() => setWanted(true)}>
             Show preview
@@ -157,7 +168,7 @@ export function Preview({ save, theme, mode, disabledPlatforms, onVerdict }: Pre
     );
   }
   if (status !== "loading" && status !== "ok") {
-    return <LinkCard url={save.url} platform={save.platform} reason={REASONS[status]} action={retry} />;
+    return <LinkCard url={save.url} platform={save.platform} title={title} reason={REASONS[status]} action={retry} />;
   }
 
   const w = width || ASSUMED_WIDTH;

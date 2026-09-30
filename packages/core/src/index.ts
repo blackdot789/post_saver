@@ -12,6 +12,7 @@ export {
   EMBED_STATUSES,
   IMPORT_STATUSES,
   STABLE_THUMB_PREFIX,
+  META_PLATFORMS,
   normalizeTag,
   normalizeTags,
   newSave,
@@ -39,3 +40,5 @@ export type {
 export { parseStart } from "./platforms/youtube.ts";
 export { embedToParams, paramsToEmbed, linkForEmbed, themeFromParams, hintsFromParams } from "./embed.ts";
 export type { EmbedTheme, EmbedHints } from "./embed.ts";
+export { MAX_BATCH } from "./api.ts";
+export type { LinkMeta, BatchItem, BatchResult } from "./api.ts";

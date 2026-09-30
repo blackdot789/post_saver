@@ -7,4 +7,6 @@ interface ImportMetaEnv {
   readonly VITE_EMULATORS?: string;
   /** The embed sandbox's origin when it isn't embed.<domain> (end-to-end test builds). */
   readonly VITE_EMBED_ORIGIN?: string;
+  /** The resolver Worker's address when it isn't `site.apiBaseUrl` (end-to-end test builds). */
+  readonly VITE_API_BASE_URL?: string;
 }

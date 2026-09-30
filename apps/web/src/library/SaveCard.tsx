@@ -1,5 +1,5 @@
 import type { EmbedTheme, Platform } from "@postsaver/core";
-import { estimatePreviewHeight, Preview } from "../embeds-host/Preview.tsx";
+import { estimatePreviewHeight, Preview, titleBelow } from "../embeds-host/Preview.tsx";
 import { PlatformBadge } from "../lib/PlatformBadge.tsx";
 import { authorLabel, describeLink, displayHost, formatDay } from "../lib/platforms.ts";
 import type { LibrarySave } from "../sync/library.ts";
@@ -116,7 +116,7 @@ const TRASH_NOTE = 72;
 /** Roughly how tall a save's grid card is in a column this wide (see Masonry). */
 export function estimateCardHeight(save: LibrarySave, width: number, previews: "always" | "click", disabledPlatforms: readonly Platform[]): number {
   const preview = save.status === "trashed" ? TRASH_NOTE : estimatePreviewHeight(save, width, previews, disabledPlatforms);
-  const text = (save.title ? 28 : 0) + (save.note ? 28 : 0) + (save.tags.length > 0 ? 28 : 0) + (save.collectionIds.length > 0 ? 20 : 0);
+  const text = (save.title && titleBelow(save.platform) ? 28 : 0) + (save.note ? 28 : 0) + (save.tags.length > 0 ? 28 : 0) + (save.collectionIds.length > 0 ? 20 : 0);
   return CARD_HEADER + preview + text + CARD_FOOTER;
 }
 
@@ -161,7 +161,10 @@ export function SaveCard(props: SaveCardProps) {
     );
   }
 
-  const hasText = !!(save.title || save.note || save.tags.length > 0 || save.collectionIds.length > 0);
+  // The title is printed here for players that don't show one, and for anything in the Trash
+  // (which has no preview); otherwise the embed or the link card shows it.
+  const title = titleBelow(save.platform) || save.status === "trashed" ? save.title : undefined;
+  const hasText = !!(title || save.note || save.tags.length > 0 || save.collectionIds.length > 0);
   return (
     <article data-save-id={save.id} tabIndex={0} aria-label={describeLink(save)} className={cx(frame, "rounded-2xl shadow-xs hover:shadow-md")}>
       <div className="py-1.5 pr-1.5 pl-3.5">
@@ -176,7 +179,7 @@ export function SaveCard(props: SaveCardProps) {
       )}
       {hasText && (
         <div className="space-y-1.5 px-3.5 pt-3">
-          {save.title && <p className="line-clamp-2 text-sm leading-snug font-semibold">{save.title}</p>}
+          {title && <p className="line-clamp-2 text-sm leading-snug font-semibold">{title}</p>}
           {save.note && <p className="line-clamp-3 text-sm whitespace-pre-line text-slate-600 dark:text-slate-300">{save.note}</p>}
           <Tags save={save} />
           <CollectionChips save={save} names={collectionNames} />

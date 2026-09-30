@@ -67,9 +67,23 @@ describe("newSave", () => {
       updatedAt: NOW,
       embedStatus: "unknown",
       needsResolve: false,
-      needsMeta: true,
+      // Instagram offers no title or author without a login, so there's nothing to wait for.
+      needsMeta: false,
       schemaVersion: SCHEMA_VERSION,
     });
+  });
+
+  it("waits for metadata only on platforms that offer some", () => {
+    const needsMeta = (url: string) => {
+      const link = parse(url);
+      if (!link) throw new Error("parse failed");
+      return newSave(link, { source: "web", now: NOW }).needsMeta;
+    };
+    expect(needsMeta("https://www.youtube.com/watch?v=dQw4w9WgXcQ")).toBe(true);
+    expect(needsMeta("https://x.com/jack/status/20")).toBe(true);
+    expect(needsMeta("https://example.com/article")).toBe(true);
+    expect(needsMeta("https://www.threads.com/@zuck/post/CuP48CiS5sx")).toBe(false);
+    expect(needsMeta("https://www.linkedin.com/feed/update/urn:li:activity:7168922878233489408/")).toBe(false);
   });
 
   it("keeps an import date, and normalises tags and note", () => {
