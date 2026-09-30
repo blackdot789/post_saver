@@ -9,6 +9,9 @@ import { expect, signIn, test } from "./fixtures.ts";
 const DAY = 24 * 3600 * 1000;
 const IG_URL = "https://www.instagram.com/reel/C8xYz12AbCd/";
 const YT_URL = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
+// How a card shows those links: the site, then the path.
+const IG_SHOWN = "instagram.com/reel/C8xYz12AbCd";
+const YT_SHOWN = "youtube.com/watch?v=dQw4w9WgXcQ";
 
 function docFor(url: string, at: Date) {
   const link = parse(url);
@@ -39,7 +42,7 @@ test("changes from another device arrive live, and so do deletes", async ({ page
   await expect(page.getByText("Nothing saved yet")).toBeVisible();
 
   await fromOtherDevice(request, uid, "instagram_C8xYz12AbCd", IG_URL);
-  await expect(saves(page)).toContainText(IG_URL);
+  await expect(saves(page)).toContainText(IG_SHOWN);
   await expect(status(page)).toHaveText("Synced");
 
   // Deleted on the other device: only a tombstone remains, and the row goes.
@@ -50,7 +53,7 @@ test("changes from another device arrive live, and so do deletes", async ({ page
 test("a device remembers where it left off and picks up what changed while it was away", async ({ page, request }) => {
   const { uid } = await openLibrary(page, request);
   await fromOtherDevice(request, uid, "instagram_C8xYz12AbCd", IG_URL);
-  await expect(saves(page)).toContainText(IG_URL);
+  await expect(saves(page)).toContainText(IG_SHOWN);
   await expect(status(page)).toHaveText("Synced");
   const record = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), `ps:sync:${uid}`);
   expect(record).toMatchObject({ epoch: 0 });
@@ -60,8 +63,8 @@ test("a device remembers where it left off and picks up what changed while it wa
   await page.goto("about:blank");
   await fromOtherDevice(request, uid, "youtube_dQw4w9WgXcQ", YT_URL);
   await page.goto("/app/");
-  await expect(saves(page)).toContainText(YT_URL);
-  await expect(saves(page)).toContainText(IG_URL);
+  await expect(saves(page)).toContainText(YT_SHOWN);
+  await expect(saves(page)).toContainText(IG_SHOWN);
   await expect(status(page)).toHaveText("Synced");
   // Only what changed since the last visit was fetched.
   await expect(status(page)).toHaveAttribute("data-sync-mode", "delta");
@@ -79,7 +82,7 @@ test("a wiped device cache leads to a full resync", async ({ page, request }) =>
   const { uid, email } = await openLibrary(page, request);
   await fromOtherDevice(request, uid, "instagram_C8xYz12AbCd", IG_URL);
   await fromOtherDevice(request, uid, "youtube_dQw4w9WgXcQ", YT_URL);
-  await expect(saves(page)).toContainText(YT_URL);
+  await expect(saves(page)).toContainText(YT_SHOWN);
   await expect(status(page)).toHaveText("Synced");
 
   // The browser (or the user) clears site data (which signs the user out too), but the sync
@@ -91,8 +94,8 @@ test("a wiped device cache leads to a full resync", async ({ page, request }) =>
   await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
   await signIn(page, email);
   await expect(page).toHaveURL(/\/app\/$/);
-  await expect(saves(page)).toContainText(IG_URL);
-  await expect(saves(page)).toContainText(YT_URL);
+  await expect(saves(page)).toContainText(IG_SHOWN);
+  await expect(saves(page)).toContainText(YT_SHOWN);
   await expect(status(page)).toHaveText("Synced");
   await expect(status(page)).toHaveAttribute("data-sync-mode", "full");
 });
@@ -109,7 +112,7 @@ test("offline is shown, and sync resumes by itself", async ({ page, context, req
 test("signing out wipes the device copy of the library", async ({ page, request }) => {
   const { uid } = await openLibrary(page, request);
   await fromOtherDevice(request, uid, "instagram_C8xYz12AbCd", IG_URL);
-  await expect(saves(page)).toContainText(IG_URL);
+  await expect(saves(page)).toContainText(IG_SHOWN);
   const before = await page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name ?? ""));
   expect(before.some((n) => n.startsWith("firestore/"))).toBe(true);
 

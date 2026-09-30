@@ -30,11 +30,15 @@ async function openLibrary(page: Page, request: APIRequestContext, previews: "al
 }
 
 /** A stub of X's widgets.js: `available` decides what createTweet resolves with. */
-const widgetsStub = (available: boolean) => `
+const widgetsStub = (available: boolean, height = 150) => `
   window.twttr = { widgets: { createTweet: async (id, el) => {
     if (!${available}) return undefined;
-    const div = document.createElement("div"); div.textContent = "Tweet " + id; div.style.height = "150px"; el.append(div); return div;
+    const div = document.createElement("div"); div.textContent = "Tweet " + id; div.style.height = "${height}px"; el.append(div); return div;
   } } };`;
+
+/** The part of a card that shows (and cuts) the preview. */
+const shownPart = (page: Page, id: string) => page.locator(`[data-save-id="${id}"] [data-preview] > div`).first();
+const heightOf = async (part: ReturnType<typeof shownPart>) => Math.round((await part.boundingBox())?.height ?? 0);
 
 test("the sandbox alone shows nothing; inside the app it renders and reports height and status", async ({ page, request, context }) => {
   // Opened directly (no parent from the app): nothing to render.
@@ -142,4 +146,58 @@ test("a platform switched off remotely shows link cards instead", async ({ page,
   } finally {
     await writeDoc(request, "config/app", { disabledEmbeds: [] });
   }
+});
+
+test("more previews than loading slots: every one still loads", async ({ page, request }) => {
+  const { email, uid } = await openLibrary(page, request);
+  // Five saves, three loading slots: a slot must be handed on once its preview has loaded.
+  const ids = ["dQw4w9WgXcQ", "aqz-KE-bpKQ", "jNQXAC9IVRw", "9bZkp7q19f0", "kJQP7kiw5Fk"];
+  for (const id of ids) await seed(request, uid, `youtube_${id}`, `https://www.youtube.com/watch?v=${id}`);
+  await page.goto("/login/");
+  await signIn(page, email);
+  await expect(page.locator("[data-preview=ok]")).toHaveCount(ids.length);
+});
+
+test("a tall post is cut at the card's limit, and 'Show full post' opens it", async ({ page, request, context }) => {
+  await context.route("https://platform.twitter.com/widgets.js", (r) => r.fulfill({ status: 200, contentType: "text/javascript", body: widgetsStub(true, 1200) }));
+  const { email, uid } = await openLibrary(page, request);
+  const id = "x_1234567890123456789";
+  await seed(request, uid, id, TWEET);
+  await page.goto("/login/");
+  await signIn(page, email);
+
+  const holder = page.locator(`[data-save-id="${id}"] [data-preview]`);
+  await expect(holder).toHaveAttribute("data-cut", "folded");
+  // The limit: a 4:5 post under a 54 px header strip, for a card this wide.
+  const width = Math.round((await holder.boundingBox())?.width ?? 0);
+  await expect.poll(() => heightOf(shownPart(page, id))).toBe(Math.round(width * 1.25) + 54);
+
+  await page.getByRole("button", { name: "Show full post" }).click();
+  await expect(holder).toHaveAttribute("data-cut", "open");
+  await expect.poll(() => heightOf(shownPart(page, id))).toBe(1200);
+  await page.getByRole("button", { name: "Show less" }).click();
+  await expect(holder).toHaveAttribute("data-cut", "folded");
+});
+
+test("an Instagram post is folded at the end of its media", async ({ page, request, context }) => {
+  // Instagram's embed page reports its height; the 154 px under the media (likes, "Add a comment…") are folded away.
+  await context.route("https://www.instagram.com/p/*/embed/", (r) =>
+    r.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: `<body style="margin:0;background:#fff">Post<script>parent.postMessage(JSON.stringify({ type: "MEASURE", details: { height: 560 } }), "*")</script></body>`,
+    }),
+  );
+  const { email, uid } = await openLibrary(page, request);
+  const id = "instagram_C8xYz12AbCd";
+  await seed(request, uid, id, "https://www.instagram.com/reel/C8xYz12AbCd/");
+  await page.goto("/login/");
+  await signIn(page, email);
+
+  const holder = page.locator(`[data-save-id="${id}"] [data-preview]`);
+  await expect(holder).toHaveAttribute("data-preview", "ok");
+  await expect(holder).toHaveAttribute("data-cut", "folded");
+  await expect.poll(() => heightOf(shownPart(page, id))).toBe(560 - 154);
+  await page.getByRole("button", { name: "Show full post" }).click();
+  await expect.poll(() => heightOf(shownPart(page, id))).toBe(560);
 });

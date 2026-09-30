@@ -1,30 +1,44 @@
 import type { ReactNode } from "react";
+import type { Platform } from "@postsaver/core";
+import { PlatformIcon } from "../lib/PlatformBadge.tsx";
 import { displayHost } from "../lib/platforms.ts";
 import { cx } from "../ui/cx.ts";
 
 interface LinkCardProps {
   url: string;
-  title?: string;
+  platform: Platform;
   /** Why there's no preview, e.g. "This post is no longer available." */
   reason?: string;
   action?: ReactNode;
   className?: string;
 }
 
-/** What a save shows when there's no preview: the link, its site, and the reason if any. */
-export function LinkCard({ url, title, reason, action, className }: LinkCardProps) {
+/** The part of a link after its host, without a trailing slash: "/p/abc" or "" for a home page. */
+function pathOf(url: string): string {
+  try {
+    const { pathname, search } = new URL(url);
+    const path = decodeURI(pathname).replace(/\/$/, "") + search;
+    return path;
+  } catch {
+    return "";
+  }
+}
+
+/** What a save shows when there's no preview: where the link goes, and the reason if any. */
+export function LinkCard({ url, platform, reason, action, className }: LinkCardProps) {
+  const path = pathOf(url);
   return (
-    <div className={cx("rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5", className)}>
-      <p className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">{displayHost(url)}</p>
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-1 line-clamp-2 block text-sm font-semibold break-all text-brand-ink underline-offset-4 hover:underline dark:text-white"
-      >
-        {title || url}
+    <div className={cx("mx-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/5", className)}>
+      <a href={url} target="_blank" rel="noopener noreferrer" className="group/link flex items-center gap-3">
+        <span className="grid size-10 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white dark:border-white/10 dark:bg-white/10">
+          <PlatformIcon platform={platform} className="size-5" />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold text-brand-ink underline-offset-4 group-hover/link:underline dark:text-white">{displayHost(url)}</span>
+          {path && <span className="block truncate text-xs text-slate-500 dark:text-slate-400">{path}</span>}
+        </span>
       </a>
-      {reason && <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{reason}</p>}
+      {reason && <p className="mt-2.5 text-sm text-slate-600 dark:text-slate-300">{reason}</p>}
       {action && <div className="mt-3">{action}</div>}
     </div>
   );

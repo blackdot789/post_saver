@@ -37,5 +37,5 @@ export type {
   SavePlan,
 } from "./schema.ts";
 export { parseStart } from "./platforms/youtube.ts";
-export { embedToParams, paramsToEmbed, linkForEmbed, themeFromParams } from "./embed.ts";
-export type { EmbedTheme } from "./embed.ts";
+export { embedToParams, paramsToEmbed, linkForEmbed, themeFromParams, hintsFromParams } from "./embed.ts";
+export type { EmbedTheme, EmbedHints } from "./embed.ts";

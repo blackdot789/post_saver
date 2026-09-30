@@ -1,5 +1,5 @@
 import type { EmbedTheme, Platform } from "@postsaver/core";
-import { Preview } from "../embeds-host/Preview.tsx";
+import { estimatePreviewHeight, Preview } from "../embeds-host/Preview.tsx";
 import { PlatformBadge } from "../lib/PlatformBadge.tsx";
 import { authorLabel, describeLink, displayHost, formatDay } from "../lib/platforms.ts";
 import type { LibrarySave } from "../sync/library.ts";
@@ -41,6 +41,14 @@ function StarIcon({ filled, className }: { filled: boolean; className?: string }
   );
 }
 
+function OpenIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 5h5v5M19 5l-8 8M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4" />
+    </svg>
+  );
+}
+
 function menuItems(save: LibrarySave, a: SaveActions): MenuItem[] {
   if (save.status === "trashed") {
     return [
@@ -59,27 +67,27 @@ function menuItems(save: LibrarySave, a: SaveActions): MenuItem[] {
   ];
 }
 
-function Header({ save, actions, selecting, selected, onToggleSelect }: Pick<SaveCardProps, "save" | "actions" | "selecting" | "selected" | "onToggleSelect">) {
+function Header({ save, actions, selecting, selected, onToggleSelect, date }: Pick<SaveCardProps, "save" | "actions" | "selecting" | "selected" | "onToggleSelect"> & { date?: boolean }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-h-9 items-center gap-2">
       {selecting && (
         <input
           type="checkbox"
           checked={selected}
           onChange={() => onToggleSelect(save.id)}
           aria-label={`Select ${describeLink(save)}`}
-          className="size-5 accent-brand-to"
+          className="size-5 shrink-0 accent-brand-to"
         />
       )}
       <PlatformBadge platform={save.platform} />
       {save.author && <span className="truncate text-sm text-slate-500 dark:text-slate-400">{authorLabel(save.platform, save.author)}</span>}
-      <span className="ml-auto shrink-0 text-xs text-slate-500 dark:text-slate-400">
-        {save.pending ? "Syncing…" : save.savedAt ? formatDay(save.savedAt) : ""}
-      </span>
-      {!selecting && <Menu label={`Actions for ${describeLink(save)}`} items={menuItems(save, actions)} />}
+      {date && <span className="ml-auto shrink-0 text-xs text-slate-500 dark:text-slate-400">{when(save)}</span>}
+      {!selecting && <Menu label={`Actions for ${describeLink(save)}`} items={menuItems(save, actions)} className={date ? undefined : "ml-auto"} />}
     </div>
   );
 }
+
+const when = (save: LibrarySave): string => (save.pending ? "Syncing…" : save.savedAt ? formatDay(save.savedAt) : "");
 
 function Tags({ save }: { save: LibrarySave }) {
   if (save.tags.length === 0) return null;
@@ -100,12 +108,24 @@ function CollectionChips({ save, names }: { save: LibrarySave; names: ReadonlyMa
   return <p className="truncate text-xs text-slate-500 dark:text-slate-400">In {labels.join(", ")}</p>;
 }
 
+// Rough heights of a grid card's parts, for laying out the grid before a card is measured.
+const CARD_HEADER = 48;
+const CARD_FOOTER = 46;
+const TRASH_NOTE = 72;
+
+/** Roughly how tall a save's grid card is in a column this wide (see Masonry). */
+export function estimateCardHeight(save: LibrarySave, width: number, previews: "always" | "click", disabledPlatforms: readonly Platform[]): number {
+  const preview = save.status === "trashed" ? TRASH_NOTE : estimatePreviewHeight(save, width, previews, disabledPlatforms);
+  const text = (save.title ? 28 : 0) + (save.note ? 28 : 0) + (save.tags.length > 0 ? 28 : 0) + (save.collectionIds.length > 0 ? 20 : 0);
+  return CARD_HEADER + preview + text + CARD_FOOTER;
+}
+
 /** One save, as a card in the grid (with its preview) or a compact row in the list. */
 export function SaveCard(props: SaveCardProps) {
-  const { save, layout, theme, previews, disabledPlatforms, collectionNames, actions, selected, selecting } = props;
+  const { save, layout, theme, previews, disabledPlatforms, collectionNames, actions, selected } = props;
   const frame = cx(
-    "rounded-2xl border bg-white transition dark:bg-white/5",
-    selected ? "border-brand-from ring-2 ring-brand-from/30" : "border-slate-200 dark:border-white/10",
+    "border bg-white transition-[border-color,box-shadow] dark:bg-white/5",
+    selected ? "border-brand-from ring-2 ring-brand-from/30" : "border-slate-200 hover:border-slate-300 dark:border-white/10 dark:hover:border-white/25",
     "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-from",
   );
   const favoriteButton = (
@@ -114,7 +134,7 @@ export function SaveCard(props: SaveCardProps) {
       onClick={() => actions.favorite(save)}
       aria-pressed={save.favorite}
       aria-label={save.favorite ? "Remove from favorites" : "Add to favorites"}
-      className={cx("grid size-9 place-items-center rounded-full hover:bg-slate-100 dark:hover:bg-white/10", save.favorite ? "text-amber-500" : "text-slate-400")}
+      className={cx("grid size-9 shrink-0 place-items-center rounded-full hover:bg-slate-100 dark:hover:bg-white/10", save.favorite ? "text-amber-500" : "text-slate-400")}
     >
       <StarIcon filled={save.favorite} className="size-5" />
     </button>
@@ -122,46 +142,64 @@ export function SaveCard(props: SaveCardProps) {
 
   if (layout === "list") {
     return (
-      <li data-save-id={save.id} tabIndex={0} className={cx(frame, "flex items-start gap-3 px-4 py-3")}>
+      <div data-save-id={save.id} tabIndex={0} className={cx(frame, "flex items-start gap-3 rounded-2xl px-4 py-2.5")}>
         <div className="min-w-0 flex-1">
-          <Header {...props} />
-          <a href={save.url} target="_blank" rel="noopener noreferrer" className="mt-1 block truncate text-sm font-medium text-brand-ink hover:underline dark:text-white">
+          <Header {...props} date />
+          <a href={save.url} target="_blank" rel="noopener noreferrer" className="block truncate text-sm font-medium text-brand-ink hover:underline dark:text-white">
             {save.title || `${describeLink(save)} · ${displayHost(save.url)}`}
           </a>
           {save.note && <p className="mt-0.5 line-clamp-1 text-sm text-slate-600 dark:text-slate-300">{save.note}</p>}
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <Tags save={save} />
-            <CollectionChips save={save} names={collectionNames} />
-          </div>
+          {(save.tags.length > 0 || save.collectionIds.length > 0) && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <Tags save={save} />
+              <CollectionChips save={save} names={collectionNames} />
+            </div>
+          )}
         </div>
         {save.status === "active" && favoriteButton}
-      </li>
+      </div>
     );
   }
 
+  const hasText = !!(save.title || save.note || save.tags.length > 0 || save.collectionIds.length > 0);
   return (
-    <li data-save-id={save.id} tabIndex={0} className={cx(frame, "mb-4 break-inside-avoid p-3")}>
-      <Header {...props} />
-      <div className="mt-2">
-        {save.status === "trashed" ? (
-          <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 dark:bg-white/5 dark:text-slate-300">
-            In the Trash{save.trashedAt ? ` since ${formatDay(save.trashedAt)}` : ""}. It's removed for good after 30 days.
-          </p>
-        ) : (
-          <Preview save={save} theme={theme} mode={previews} disabledPlatforms={disabledPlatforms} onVerdict={(s) => actions.verdict(save, s)} />
-        )}
+    <article data-save-id={save.id} tabIndex={0} aria-label={describeLink(save)} className={cx(frame, "rounded-2xl shadow-xs hover:shadow-md")}>
+      <div className="py-1.5 pr-1.5 pl-3.5">
+        <Header {...props} />
       </div>
-      {(save.title || save.note || save.tags.length > 0 || save.collectionIds.length > 0 || save.status === "active") && (
-        <div className="mt-2 flex items-start gap-2">
-          <div className="min-w-0 flex-1 space-y-1">
-            {save.title && <p className="line-clamp-2 text-sm font-medium">{save.title}</p>}
-            {save.note && <p className="line-clamp-3 text-sm whitespace-pre-line text-slate-600 dark:text-slate-300">{save.note}</p>}
-            <Tags save={save} />
-            <CollectionChips save={save} names={collectionNames} />
-          </div>
-          {save.status === "active" && favoriteButton}
+      {save.status === "trashed" ? (
+        <p className="mx-3 rounded-xl bg-slate-50 p-3.5 text-sm text-slate-600 dark:bg-white/5 dark:text-slate-300">
+          In the Trash{save.trashedAt ? ` since ${formatDay(save.trashedAt)}` : ""}. It's removed for good after 30 days.
+        </p>
+      ) : (
+        <Preview save={save} theme={theme} mode={previews} disabledPlatforms={disabledPlatforms} onVerdict={(s) => actions.verdict(save, s)} />
+      )}
+      {hasText && (
+        <div className="space-y-1.5 px-3.5 pt-3">
+          {save.title && <p className="line-clamp-2 text-sm leading-snug font-semibold">{save.title}</p>}
+          {save.note && <p className="line-clamp-3 text-sm whitespace-pre-line text-slate-600 dark:text-slate-300">{save.note}</p>}
+          <Tags save={save} />
+          <CollectionChips save={save} names={collectionNames} />
         </div>
       )}
-    </li>
+      <div className="flex items-center gap-1 py-1 pr-1.5 pl-3.5">
+        <span className="mr-auto text-xs text-slate-500 dark:text-slate-400">{when(save)}</span>
+        {save.status === "active" && (
+          <>
+            <a
+              href={save.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Open original"
+              title="Open original"
+              className="grid size-9 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-brand-ink dark:hover:bg-white/10 dark:hover:text-white"
+            >
+              <OpenIcon className="size-[18px]" />
+            </a>
+            {favoriteButton}
+          </>
+        )}
+      </div>
+    </article>
   );
 }

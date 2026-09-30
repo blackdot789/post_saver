@@ -8,8 +8,21 @@ import type { Embed } from "./types.ts";
 
 export type EmbedTheme = "light" | "dark";
 
-/** The fragment parameters for an embed: `p` is the platform, the rest are the ids. */
-export function embedToParams(embed: Embed, theme: EmbedTheme): URLSearchParams {
+/** How the host wants a preview drawn. Presentation only: none of it decides what is rendered. */
+export interface EmbedHints {
+  theme: EmbedTheme;
+  /** The tallest the host shows a preview, in CSS pixels. Renderers that pick their own height stay within it. */
+  maxHeight?: number;
+  /** An upright video (a YouTube Short): drawn 9:16 instead of 16:9. */
+  tall?: boolean;
+}
+
+const MIN_HINT_HEIGHT = 200;
+const MAX_HINT_HEIGHT = 2000;
+
+/** The fragment parameters for an embed: `p` is the platform, the rest are the ids and the hints. */
+export function embedToParams(embed: Embed, hints: EmbedTheme | EmbedHints): URLSearchParams {
+  const { theme, maxHeight, tall }: EmbedHints = typeof hints === "string" ? { theme: hints } : hints;
   const params = new URLSearchParams();
   params.set("p", embed.platform);
   switch (embed.platform) {
@@ -47,6 +60,8 @@ export function embedToParams(embed: Embed, theme: EmbedTheme): URLSearchParams 
       break;
   }
   params.set("theme", theme);
+  if (maxHeight) params.set("max", String(Math.round(maxHeight)));
+  if (tall) params.set("tall", "1");
   return params;
 }
 
@@ -135,4 +150,14 @@ export function paramsToEmbed(params: URLSearchParams): Embed | null {
 
 export function themeFromParams(params: URLSearchParams): EmbedTheme {
   return params.get("theme") === "dark" ? "dark" : "light";
+}
+
+/** The hints in a fragment. Anything odd is dropped, so they can only ever change sizes and colours. */
+export function hintsFromParams(params: URLSearchParams): EmbedHints {
+  const max = Number(params.get("max"));
+  return {
+    theme: themeFromParams(params),
+    ...(Number.isInteger(max) && max >= MIN_HINT_HEIGHT && max <= MAX_HINT_HEIGHT ? { maxHeight: max } : {}),
+    ...(params.get("tall") === "1" ? { tall: true } : {}),
+  };
 }

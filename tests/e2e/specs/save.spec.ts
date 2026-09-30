@@ -87,7 +87,7 @@ test("a save on one device shows up live on another, which sees it as already sa
   await expect(phone.getByText("Synced to your library.")).toBeVisible();
 
   // The laptop's library updates by itself.
-  await expect(page.getByRole("list", { name: "Saves" })).toContainText(IG_URL);
+  await expect(page.getByRole("list", { name: "Saves" })).toContainText("instagram.com/reel/C8xYz12AbCd");
 
   // Saving it on the laptop too: the server already has it.
   await page.goto(save({ url: IG_URL }));

@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import type { Platform } from "@postsaver/core";
+import { PlatformIcon } from "../lib/PlatformBadge.tsx";
 import { PLATFORM_NAMES } from "../lib/platforms.ts";
 import { Button } from "../ui/Button.tsx";
 import { cx } from "../ui/cx.ts";
@@ -84,8 +85,12 @@ export function TopBar({ query, onQuery, platforms, layout, onLayout, selecting,
                 type="button"
                 aria-pressed={query.platform === p}
                 onClick={() => onQuery({ platform: query.platform === p ? undefined : p })}
-                className={cx("rounded-full px-3 py-1 text-sm", query.platform === p ? "bg-brand-to text-white" : "bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15")}
+                className={cx(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm",
+                  query.platform === p ? "bg-brand-to text-white" : "bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15",
+                )}
               >
+                <PlatformIcon platform={p} className={cx("size-3.5", query.platform === p && "text-white!")} />
                 {PLATFORM_NAMES[p]}
               </button>
             </li>

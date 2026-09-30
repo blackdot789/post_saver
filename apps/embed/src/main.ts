@@ -4,11 +4,12 @@
  * in the URL fragment, e.g. #p=youtube&id=…&theme=dark; this page validates it, renders it with
  * the platform's official embed, and reports back with postMessage:
  *   { type: "ps:status", status: "ok" | "unavailable" | "blocked", reason? }
- *   { type: "ps:height", height }
+ *   { type: "ps:height", height, fold? }   fold: where the post itself ends and the platform's
+ *                                          own footer (likes, "add a comment") begins
  * Messages go only to a parent origin from the config, and only such a parent is served.
  */
 import { origins } from "@postsaver/config";
-import { paramsToEmbed, themeFromParams } from "@postsaver/core";
+import { hintsFromParams, paramsToEmbed } from "@postsaver/core";
 import { render, type Status } from "./render.ts";
 
 const allowedParents = new Set<string>([origins.app, origins.www]);
@@ -36,8 +37,12 @@ function reportStatus(status: Status, reason?: string): void {
   say({ type: "ps:status", status, ...(reason ? { reason } : {}) });
 }
 
+let fold: number | null = null;
+
 function reportHeight(): void {
-  if (root) say({ type: "ps:height", height: Math.ceil(root.getBoundingClientRect().height) });
+  if (!root) return;
+  const height = Math.ceil(root.getBoundingClientRect().height);
+  say({ type: "ps:height", height, ...(fold && fold > 0 && fold < height ? { fold: Math.round(fold) } : {}) });
 }
 
 async function main(): Promise<void> {
@@ -47,14 +52,24 @@ async function main(): Promise<void> {
     return;
   }
   const params = new URLSearchParams(location.hash.replace(/^#/, ""));
-  const theme = themeFromParams(params);
-  document.documentElement.dataset.theme = theme;
+  const hints = hintsFromParams(params);
+  document.documentElement.dataset.theme = hints.theme;
   const embed = paramsToEmbed(params);
   if (!embed) return reportStatus("unavailable", "bad-link");
 
   new ResizeObserver(reportHeight).observe(root);
   try {
-    const status = await render(embed, { root, theme, width: root.clientWidth || document.documentElement.clientWidth });
+    const status = await render(embed, {
+      root,
+      theme: hints.theme,
+      width: root.clientWidth || document.documentElement.clientWidth,
+      maxHeight: hints.maxHeight,
+      tall: hints.tall ?? false,
+      fold(px) {
+        fold = px;
+        reportHeight();
+      },
+    });
     reportStatus(status);
   } catch (error) {
     reportStatus("blocked", error instanceof Error ? error.message : "error");

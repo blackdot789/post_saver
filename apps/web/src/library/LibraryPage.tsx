@@ -31,7 +31,8 @@ import {
   TagsDialog,
 } from "./dialogs.tsx";
 import { applyQuery, platformsInUse, tagCounts, type Layout } from "./query.ts";
-import { SaveCard, type SaveActions } from "./SaveCard.tsx";
+import { Masonry } from "./Masonry.tsx";
+import { estimateCardHeight, SaveCard, type SaveActions } from "./SaveCard.tsx";
 import { useSearch } from "./search.ts";
 import { Sidebar } from "./Sidebar.tsx";
 import { TopBar } from "./TopBar.tsx";
@@ -40,6 +41,10 @@ import { useQuery } from "./useQuery.ts";
 // The library (CLAUDE.md §6.6): everything the device holds, filtered and searched in memory.
 
 const forget = () => undefined;
+const saveKey = (save: LibrarySave) => save.id;
+/** The grid has as many columns as fit at this width; narrower and platform embeds get cramped. */
+const MIN_CARD_WIDTH = 300;
+const CARD_GAP = 16;
 
 type DialogState =
   | { kind: "none" }
@@ -212,6 +217,21 @@ export function LibraryPage({ user }: { user: User }) {
   }
 
   const disabledPlatforms = config.disabledEmbeds ?? [];
+  const cardPreviews = previews === "always" ? "always" : "click";
+  const card = (save: LibrarySave) => (
+    <SaveCard
+      save={save}
+      layout={layout}
+      theme={theme}
+      previews={cardPreviews}
+      disabledPlatforms={disabledPlatforms}
+      collectionNames={collectionNames}
+      actions={actions}
+      selecting={selecting}
+      selected={selected.has(save.id)}
+      onToggleSelect={toggleSelect}
+    />
+  );
   const sidebar = (
     <Sidebar
       query={query}
@@ -227,7 +247,7 @@ export function LibraryPage({ user }: { user: User }) {
   return (
     <div className={cx("min-h-dvh", selecting && "pb-24")}>
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/85 backdrop-blur dark:border-white/10 dark:bg-night/85">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5">
+        <div className="mx-auto flex max-w-[100rem] items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
           <BrandLink />
           <div className="flex items-center gap-2 sm:gap-3">
             <span className="hidden sm:inline">
@@ -243,7 +263,7 @@ export function LibraryPage({ user }: { user: User }) {
         </div>
       </header>
 
-      <div className="mx-auto flex max-w-6xl gap-8 px-4 py-6">
+      <div className="mx-auto flex max-w-[100rem] gap-8 px-4 py-6 sm:px-6">
         <aside className="hidden w-56 shrink-0 md:block">
           <div className="sticky top-20">{sidebar}</div>
         </aside>
@@ -303,25 +323,21 @@ export function LibraryPage({ user }: { user: User }) {
               <PageSpinner label="Loading your saves…" />
             ) : shown.length === 0 ? (
               <Empty query={query} total={counts.all} onAdd={() => setDialog({ kind: "add" })} />
-            ) : (
-              <ul
-                aria-label="Saves"
-                className={layout === "grid" ? "columns-1 gap-4 sm:columns-2 xl:columns-3" : "space-y-2"}
+            ) : layout === "grid" ? (
+              <Masonry
+                items={shown}
+                getKey={saveKey}
+                minColumnWidth={MIN_CARD_WIDTH}
+                gap={CARD_GAP}
+                estimate={(save, width) => estimateCardHeight(save, width, cardPreviews, disabledPlatforms)}
+                label="Saves"
               >
+                {card}
+              </Masonry>
+            ) : (
+              <ul aria-label="Saves" className="space-y-2">
                 {shown.map((save) => (
-                  <SaveCard
-                    key={save.id}
-                    save={save}
-                    layout={layout}
-                    theme={theme}
-                    previews={previews === "always" ? "always" : "click"}
-                    disabledPlatforms={disabledPlatforms}
-                    collectionNames={collectionNames}
-                    actions={actions}
-                    selecting={selecting}
-                    selected={selected.has(save.id)}
-                    onToggleSelect={toggleSelect}
-                  />
+                  <li key={save.id}>{card(save)}</li>
                 ))}
               </ul>
             )}

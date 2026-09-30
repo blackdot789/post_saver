@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { embedToParams, linkForEmbed, paramsToEmbed, parse, themeFromParams, type Embed } from "../src/index.ts";
+import { embedToParams, hintsFromParams, linkForEmbed, paramsToEmbed, parse, themeFromParams, type Embed } from "../src/index.ts";
 import { facebook } from "./fixtures/facebook.ts";
 import { instagram } from "./fixtures/instagram.ts";
 import { linkedin } from "./fixtures/linkedin.ts";
@@ -51,5 +51,16 @@ describe("embed fragment", () => {
 
   it("the theme defaults to light", () => {
     expect(themeFromParams(new URLSearchParams("p=x&id=1"))).toBe("light");
+  });
+
+  it("carries the size hints, and they never change what is rendered", () => {
+    const embed: Embed = { platform: "youtube", id: "dQw4w9WgXcQ" };
+    const params = embedToParams(embed, { theme: "dark", maxHeight: 451.6, tall: true });
+    expect(paramsToEmbed(params)).toEqual(embed);
+    expect(hintsFromParams(params)).toEqual({ theme: "dark", maxHeight: 452, tall: true });
+  });
+
+  it.each(["max=12", "max=99999", "max=abc", "max=300.5", "tall=yes"])("drops the odd hint %s", (fragment) => {
+    expect(hintsFromParams(new URLSearchParams(`p=x&id=1&${fragment}`))).toEqual({ theme: "light" });
   });
 });
