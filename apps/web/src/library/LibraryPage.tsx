@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
+import { useDeleting } from "../account/delete.ts";
 import { signOut } from "../auth/session.ts";
 import { savePending } from "../capture/saveLink.ts";
 import { watchAppConfig, type RemoteConfig } from "../data/appConfig.ts";
@@ -9,6 +10,7 @@ import { clearLocalData } from "../data/firestore.ts";
 import { ensureProfile } from "../data/profile.ts";
 import { applyTheme, defaultPreviews, useSettings } from "../data/settings.ts";
 import { useEnrichment } from "../enrich/run.ts";
+import { useImport } from "../import/useImport.ts";
 import { errorMessage } from "../pages/save/messages.ts";
 import { SyncStatus } from "../pages/app/SyncStatus.tsx";
 import type { LibrarySave } from "../sync/library.ts";
@@ -20,6 +22,7 @@ import { cx } from "../ui/cx.ts";
 import { PageSpinner } from "../ui/Spinner.tsx";
 import { BulkBar } from "./BulkBar.tsx";
 import { ConsentBanner } from "./ConsentBanner.tsx";
+import { DeleteAccountDialog, DeletionPending, ExportDialog, ImportBanner, ImportDialog } from "./DataDialogs.tsx";
 import {
   AddDialog,
   BulkTagsDialog,
@@ -51,6 +54,9 @@ type DialogState =
   | { kind: "none" }
   | { kind: "add" }
   | { kind: "settings" }
+  | { kind: "import" }
+  | { kind: "export" }
+  | { kind: "delete-account" }
   | { kind: "tags"; save: LibrarySave }
   | { kind: "note"; save: LibrarySave }
   | { kind: "collections"; saves: LibrarySave[] }
@@ -59,11 +65,14 @@ type DialogState =
   | { kind: "collection"; collection: Collection }
   | { kind: "confirm"; title: string; body: string; action: string; onConfirm: () => void };
 
-function useAppConfig(): RemoteConfig {
-  const [config, setConfig] = useState<RemoteConfig>({});
+/** `config/app`, or null until it has been read (from the server, or this device's copy of it). */
+function useAppConfig(): RemoteConfig | null {
+  const [config, setConfig] = useState<RemoteConfig | null>(null);
   useEffect(() => watchAppConfig(setConfig), []);
   return config;
 }
+
+const NO_CONFIG: RemoteConfig = {};
 
 function useCollections(uid: string): Collection[] {
   const [collections, setCollections] = useState<Collection[]>([]);
@@ -87,7 +96,8 @@ export function LibraryPage({ user }: { user: User }) {
   const uid = user.uid;
   const library = useLibrary(uid);
   const collections = useCollections(uid);
-  const config = useAppConfig();
+  const remoteConfig = useAppConfig();
+  const config = remoteConfig ?? NO_CONFIG;
   const [settings, updateSettings] = useSettings(uid);
   const [query, setQuery] = useQuery();
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
@@ -98,6 +108,8 @@ export function LibraryPage({ user }: { user: User }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const theme = useResolvedTheme(settings.theme);
   useEnrichment(uid, library);
+  const importing = useImport(uid, library, collections, remoteConfig);
+  const deleting = useDeleting(uid);
 
   useEffect(() => applyTheme(settings.theme), [settings.theme]);
 
@@ -301,6 +313,8 @@ export function LibraryPage({ user }: { user: User }) {
               Syncing stopped: {errorMessage({ code: library.problem })}
             </Alert>
           )}
+          {deleting && dialog.kind !== "delete-account" && <DeletionPending uid={uid} onContinue={() => setDialog({ kind: "delete-account" })} />}
+          <ImportBanner controls={importing} />
           {caughtUp > 0 && (
             <Alert tone="success" className="mb-4">
               {caughtUp === 1 ? "The link you shared before signing in is saved." : `The ${caughtUp} links you shared before signing in are saved.`}
@@ -370,7 +384,36 @@ export function LibraryPage({ user }: { user: User }) {
 
       {dialog.kind === "add" && <AddDialog uid={uid} onClose={() => setDialog({ kind: "none" })} />}
       {dialog.kind === "settings" && (
-        <SettingsDialog user={user} settings={settings} onUpdate={updateSettings} onSignOut={() => void leave()} onClose={() => setDialog({ kind: "none" })} />
+        <SettingsDialog
+          user={user}
+          settings={settings}
+          onUpdate={updateSettings}
+          onSignOut={() => void leave()}
+          onImport={() => setDialog({ kind: "import" })}
+          onExport={() => setDialog({ kind: "export" })}
+          onDeleteAccount={() => setDialog({ kind: "delete-account" })}
+          onClose={() => setDialog({ kind: "none" })}
+        />
+      )}
+      {dialog.kind === "import" && (
+        <ImportDialog
+          saves={library.saves}
+          collections={collections}
+          controls={importing}
+          onUnsave={settings.onUnsave ?? "keep"}
+          onChooseUnsave={(onUnsave) => updateSettings({ onUnsave })}
+          onClose={() => setDialog({ kind: "none" })}
+        />
+      )}
+      {dialog.kind === "export" && <ExportDialog saves={library.saves} collections={collections} synced={library.status === "synced"} onClose={() => setDialog({ kind: "none" })} />}
+      {dialog.kind === "delete-account" && (
+        <DeleteAccountDialog
+          user={user}
+          saveCount={library.saves.length}
+          resuming={deleting}
+          onExport={() => setDialog({ kind: "export" })}
+          onClose={() => setDialog({ kind: "none" })}
+        />
       )}
       {dialog.kind === "tags" && <TagsDialog uid={uid} save={library.saves.find((s) => s.id === dialog.save.id) ?? dialog.save} onClose={() => setDialog({ kind: "none" })} />}
       {dialog.kind === "note" && <NoteDialog uid={uid} save={library.saves.find((s) => s.id === dialog.save.id) ?? dialog.save} onClose={() => setDialog({ kind: "none" })} />}

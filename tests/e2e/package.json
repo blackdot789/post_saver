@@ -11,6 +11,7 @@
     "@playwright/test": "^1.63.0",
     "@postsaver/core": "workspace:*",
     "@types/node": "^26.6.3",
+    "fflate": "^0.8.3",
     "firebase-tools": "^15.31.0"
   }
 }

@@ -245,6 +245,9 @@ interface SettingsDialogProps {
   settings: UserSettings;
   onUpdate: (patch: UserSettings) => void;
   onSignOut: () => void;
+  onImport: () => void;
+  onExport: () => void;
+  onDeleteAccount: () => void;
   onClose: () => void;
 }
 
@@ -267,7 +270,7 @@ function Choice<T extends string>({ label, value, options, onChange }: { label: 
   );
 }
 
-export function SettingsDialog({ user, settings, onUpdate, onSignOut, onClose }: SettingsDialogProps) {
+export function SettingsDialog({ user, settings, onUpdate, onSignOut, onImport, onExport, onDeleteAccount, onClose }: SettingsDialogProps) {
   const [busy, setBusy] = useState(false);
   useEffect(() => () => setBusy(false), []);
   return (
@@ -296,21 +299,36 @@ export function SettingsDialog({ user, settings, onUpdate, onSignOut, onClose }:
           </ButtonLink>
         </div>
         <div>
+          <p className="text-sm font-medium">Your data</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Bring in posts you saved elsewhere, or download everything you've saved here.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" onClick={onImport}>
+              Import…
+            </Button>
+            <Button variant="secondary" size="sm" onClick={onExport}>
+              Export…
+            </Button>
+          </div>
+        </div>
+        <div>
           <p className="text-sm font-medium">Account</p>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{user.email}</p>
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Import, export and deleting the account arrive in a later update.</p>
-          <Button
-            variant="secondary"
-            size="sm"
-            busy={busy}
-            className="mt-3"
-            onClick={() => {
-              setBusy(true);
-              onSignOut();
-            }}
-          >
-            Sign out
-          </Button>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              busy={busy}
+              onClick={() => {
+                setBusy(true);
+                onSignOut();
+              }}
+            >
+              Sign out
+            </Button>
+            <Button variant="link" className="text-sm text-red-700 dark:text-red-300" onClick={onDeleteAccount}>
+              Delete account…
+            </Button>
+          </div>
         </div>
       </div>
     </Dialog>

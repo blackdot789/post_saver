@@ -36,6 +36,7 @@ const HEADINGS: Record<Mode, [string, string]> = {
 function noticeFromUrl(params: URLSearchParams): Notice | null {
   if (params.has("verified")) return { tone: "success", text: "Your email is verified. Sign in to continue." };
   if (params.has("reset")) return { tone: "success", text: "If you changed your password, sign in with the new one." };
+  if (params.has("deleted")) return { tone: "success", text: "Your account and everything in it were deleted." };
   return null;
 }
 

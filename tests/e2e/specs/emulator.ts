@@ -108,3 +108,24 @@ export async function writeDoc(request: APIRequestContext, path: string, data: o
   const res = await request.patch(`${DOCS}/${path}${mask}`, { headers: ADMIN, data: { fields: encodeFields(data as Record<string, unknown>) } });
   if (!res.ok()) throw new Error(`writeDoc ${path}: ${res.status()} ${await res.text()}`);
 }
+
+/** The ids of the documents in a collection (as an admin), however many pages that takes. */
+export async function listDocs(request: APIRequestContext, path: string): Promise<string[]> {
+  const ids: string[] = [];
+  let pageToken = "";
+  do {
+    const res = await request.get(`${DOCS}/${path}?pageSize=300${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`, { headers: ADMIN });
+    const page = (await res.json()) as { documents?: Array<{ name: string }>; nextPageToken?: string };
+    for (const d of page.documents ?? []) ids.push(d.name.split("/").pop() ?? "");
+    pageToken = page.nextPageToken ?? "";
+  } while (pageToken);
+  return ids;
+}
+
+/** Whether an email/password account still exists (by trying to sign in). */
+export async function accountExists(request: APIRequestContext, email: string): Promise<boolean> {
+  const res = await request.post(`${AUTH}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${API_KEY}`, {
+    data: { email, password: PASSWORD, returnSecureToken: true },
+  });
+  return res.ok();
+}
