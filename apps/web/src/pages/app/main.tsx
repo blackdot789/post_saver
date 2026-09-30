@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { readLocal } from "../../lib/storage.ts";
 import { AppPage } from "./AppPage.tsx";
+import { registerServiceWorker } from "../../lib/serviceWorker.ts";
 
 // Apply the last known theme before the first paint, so a dark-theme user sees no flash.
 try {
@@ -11,6 +12,8 @@ try {
 } catch {
   // No stored theme; the OS preference applies.
 }
+
+registerServiceWorker();
 
 const root = document.getElementById("root");
 if (root) {

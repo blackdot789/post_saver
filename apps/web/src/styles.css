@@ -21,6 +21,21 @@
   --color-brand-ink: var(--brand-ink);
   /* Page background in dark mode. */
   --color-night: #050b1c;
+  /* The setup guide: each of its three pictures lights up in turn. */
+  --animate-step: ps-step 6s ease-in-out infinite;
+}
+
+@keyframes ps-step {
+  0%,
+  28% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  34%,
+  100% {
+    opacity: 0.45;
+    transform: none;
+  }
 }
 
 @layer base {

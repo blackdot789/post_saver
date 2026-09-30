@@ -15,7 +15,7 @@ import type { LibrarySave } from "../sync/library.ts";
 import { useLibrary } from "../sync/useLibrary.ts";
 import { Alert } from "../ui/Alert.tsx";
 import { BrandLink } from "../ui/AuthLayout.tsx";
-import { Button } from "../ui/Button.tsx";
+import { Button, ButtonLink } from "../ui/Button.tsx";
 import { cx } from "../ui/cx.ts";
 import { PageSpinner } from "../ui/Spinner.tsx";
 import { BulkBar } from "./BulkBar.tsx";
@@ -398,11 +398,16 @@ function Empty({ query, total, onAdd }: { query: { view: string; q: string; tag?
       <div className="rounded-3xl border border-dashed border-slate-300 px-6 py-12 text-center dark:border-white/15">
         <p className="text-lg font-semibold">Nothing saved yet</p>
         <p className="mx-auto mt-1.5 max-w-sm text-slate-600 dark:text-slate-300">
-          Share a post from any app to this one, or paste its link here, and it shows up on all your devices.
+Share a post from any app to this one, or paste its link here, and it shows up on all your devices. Setting up takes a minute.
         </p>
-        <Button size="sm" className="mt-5" onClick={onAdd}>
-          Save a link
-        </Button>
+        <div className="mt-5 flex flex-wrap justify-center gap-3">
+          <ButtonLink href="/setup/" size="sm">
+            Set up saving
+          </ButtonLink>
+          <Button variant="secondary" size="sm" onClick={onAdd}>
+            Paste a link
+          </Button>
+        </div>
       </div>
     );
   }

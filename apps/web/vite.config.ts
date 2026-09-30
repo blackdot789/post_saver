@@ -9,6 +9,9 @@ import { siteConfigPlugin } from "@postsaver/config/vite-plugin";
 const here = (p: string) => resolve(import.meta.dirname, p);
 const e2eEnv = (mode: string) => loadEnv(mode, import.meta.dirname, "VITE_");
 
+/** The pages that open without a connection (the landing page is left to the network). */
+const APP_PAGES = ["/app/", "/login/", "/save/", "/share/", "/setup/"];
+
 // `--mode e2e` builds against the local Firebase emulators (see .env.e2e and tests/e2e).
 export default defineConfig(({ mode }) => ({
   plugins: [
@@ -20,7 +23,7 @@ export default defineConfig(({ mode }) => ({
         }),
       brandCssPath: here("src/generated/brand.css"),
       files: () => ({
-        "robots.txt": `User-agent: *\nAllow: /\nDisallow: /app/\nDisallow: /login/\nDisallow: /save/\nDisallow: /share/\n\nSitemap: ${origins.app}/sitemap.xml\n`,
+        "robots.txt": `User-agent: *\nAllow: /\n${APP_PAGES.map((p) => `Disallow: ${p}\n`).join("")}\nSitemap: ${origins.app}/sitemap.xml\n`,
         "sitemap.xml": `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${origins.app}/</loc></url>\n</urlset>\n`,
         "manifest.webmanifest": JSON.stringify(
           {
@@ -46,11 +49,22 @@ export default defineConfig(({ mode }) => ({
               method: "GET",
               params: { title: "title", text: "text", url: "url" },
             },
+            // A long press on the app's icon.
+            shortcuts: [
+              { name: "Save a link", url: "/save/", icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
+              { name: "Library", url: "/app/", icons: [{ src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
+            ],
           },
           null,
           2,
         ),
       }),
+      serviceWorker: {
+        template: here("sw.template.js"),
+        pages: APP_PAGES,
+        // Scripts, styles and fonts (hashed names), icons and the manifest.
+        keep: (path) => path.startsWith("/assets/") || path.startsWith("/icons/") || path === "/favicon.svg" || path === "/manifest.webmanifest",
+      },
     }),
     react(),
     tailwindcss(),
@@ -64,6 +78,7 @@ export default defineConfig(({ mode }) => ({
         app: here("app/index.html"),
         save: here("save/index.html"),
         share: here("share/index.html"),
+        setup: here("setup/index.html"),
       },
     },
   },

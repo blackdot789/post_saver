@@ -10,7 +10,7 @@ import { SaveResult } from "../pages/save/SaveResult.tsx";
 import { errorMessage } from "../pages/save/messages.ts";
 import type { LibrarySave } from "../sync/library.ts";
 import { Alert } from "../ui/Alert.tsx";
-import { Button } from "../ui/Button.tsx";
+import { Button, ButtonLink } from "../ui/Button.tsx";
 import { Dialog } from "../ui/Dialog.tsx";
 import { TextField } from "../ui/TextField.tsx";
 
@@ -288,6 +288,13 @@ export function SettingsDialog({ user, settings, onUpdate, onSignOut, onClose }:
           ]}
           onChange={(previews) => onUpdate({ previews })}
         />
+        <div>
+          <p className="text-sm font-medium">Saving from this device</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Put the app in your phone's Share menu, or add a Save button to your browser.</p>
+          <ButtonLink href="/setup/" variant="secondary" size="sm" className="mt-3">
+            Set up saving
+          </ButtonLink>
+        </div>
         <div>
           <p className="text-sm font-medium">Account</p>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{user.email}</p>

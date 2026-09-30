@@ -17,6 +17,9 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${PORT}`,
     trace: "retain-on-failure",
+    // The service worker would answer page loads from its own copy and hide them from the
+    // tests' network stubs. Only pwa.spec.ts, which tests it, lets it run.
+    serviceWorkers: "block",
   },
   projects: [{ name: "chrome", use: { ...devices["Desktop Chrome"], channel: "chrome" } }],
   // The test:e2e script builds both dist-e2e folders first. Vite is started directly (not

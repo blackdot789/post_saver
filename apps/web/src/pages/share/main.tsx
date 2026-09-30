@@ -2,6 +2,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { SavePage } from "../save/SavePage.tsx";
+import { registerServiceWorker } from "../../lib/serviceWorker.ts";
+
+registerServiceWorker();
 
 const root = document.getElementById("root");
 if (root) {
