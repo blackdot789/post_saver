@@ -19,8 +19,9 @@ This file is the **single source of truth for the whole project**: product, deci
   - **Phase 1, step 1 (the URL engine, `packages/core`) is done.**
   - **Phase 1, step 2 (Firestore schema, rules, rules tests) is done** and pushed (`039cbdc`). The owner deployed the rules and indexes to both projects (Claude's auto-mode safety check blocks `firebase deploy`, so the owner runs deploys); Claude verified that the live rules equal `firebase/firestore.rules`.
   - **Phase 1, step 3 (sign-in) is done** and live on `<domain>/login/`. The owner confirmed Google and email sign-in work (2026-09-29).
-  - **Phase 1, step 4 (saving posts) is done:** `saveLink()`, `/save/`, `/share/` (+ the manifest `share_target`), the signed-out waiting list, offline saves, "Already saved"/"Move to top", tags and a note, and a temporary "latest saves" list on `/app/`. 57 web unit tests, 19 browser tests (now with the Firestore emulator too). No rules change, so no rules deploy. Needs the owner's device test (§10).
-  - **Next: Phase 1, step 5: the sync engine + status UI** (§6.5, §9).
+  - **Phase 1, step 4 (saving posts) is done:** `saveLink()`, `/save/`, `/share/` (+ the manifest `share_target`), the signed-out waiting list, offline saves, "Already saved"/"Move to top", tags and a note, and a temporary "latest saves" list on `/app/`. 57 web unit tests, 19 browser tests (now with the Firestore emulator too). No rules change, so no rules deploy. Pushed (`c36cc56`), live. **The owner tested it on the OnePlus and the laptop (2026-09-30): saves sync between them.**
+  - **Phase 1, step 5 (sync engine + status UI) is done:** one delta listener per account with a persisted server watermark, the library rendered from the device cache, full resync on a wiped cache / new sync epoch / 45 days away, the Synced · Syncing… · Offline · paused indicator, `config/app` notices, the delete timeline (trash → tombstone → gone) run on open, and a wiped device copy on sign-out. 74 web unit tests, 25 browser tests. No rules change.
+  - **Next: Phase 1, step 6: the embed sandbox renderers + host component** (§6.6, §9).
 - **The original plan file**, `~/.claude/plans/make-a-full-proof-vivid-rose.md`, exists only on the owner's Mac and is superseded by this file. Its local copy `.claude/PROJECT_PLAN.md` (git-ignored) carries the owner's progress tracker at the top; keep it current (see above).
 
 ## 1. Working with the owner
@@ -101,7 +102,7 @@ cd firebase && firebase emulators:start    # Auth 9099, Firestore 8080, UI 4000 
 site.config.ts        the ONLY place for domain, brand, contacts, GitHub repos, Worker URL, Firebase web configs
 packages/config/      typed access: index.ts (hosts/origins/firebaseConfig), html.ts (%TOKENS%, CSP), vite-plugin.ts
 packages/core/        URL engine: parse(), extractSharedUrl()/findUrls(), saveId(); fixture tests (Vitest)
-apps/web/             main site: static landing + 404, React pages /login/, /app/, /save/, /share/ (src/{auth,capture,data,lib,ui,pages})
+apps/web/             main site: static landing + 404, React pages /login/, /app/, /save/, /share/ (src/{auth,capture,data,sync,lib,ui,pages})
 apps/embed/           embed sandbox (placeholder: answers the parent via postMessage)
 workers/resolver/     Cloudflare Worker (Phase 0: /health + config-driven CORS)
 firebase/             firebase.json, .firebaserc (dev/prod aliases), firestore.rules + test/ (rules tests), indexes, hosting/
@@ -214,10 +215,16 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 | `src/lib/firebase.ts` | `firebaseEnv` (prod in production builds, dev otherwise, or `VITE_FIREBASE_ENV`), `useEmulators`, `firebaseApp()` (lazy `initializeApp`; `demo` = an emulator-only config, project `demo-post-saver`) |
 | `src/lib/storage.ts` | `readLocal`/`writeLocal`: localStorage wrapped in try/catch, for conveniences only |
 | `src/lib/platforms.ts` · `src/lib/useOnline.ts` | `PLATFORM_NAMES`, `describeLink` ("Instagram reel", "YouTube Short", web → "Link"), `authorLabel` (@handle, u/name), `displayHost`, `formatDay` ("12 Sep", year only when not this year) · `useOnline()` |
-| `src/data/firestore.ts` | `getDb()`: `initializeFirestore` with `persistentLocalCache({ persistentMultipleTabManager, CACHE_SIZE_UNLIMITED })` (the SDK falls back to memory where IndexedDB is blocked), emulator on 8080 when `useEmulators`. `savesOf(uid)`, `saveRef(uid, id)`, `userRef(uid)`, `errorCode(e)` |
+| `src/data/firestore.ts` | `getDb()`: `initializeFirestore` with `persistentLocalCache({ persistentMultipleTabManager, CACHE_SIZE_UNLIMITED })` (the SDK falls back to memory where IndexedDB is blocked), emulator on 8080 when `useEmulators`. `savesOf(uid)`, `saveRef(uid, id)`, `userRef(uid)`, `errorCode(e)`, **`clearLocalData()`** (terminate + `clearIndexedDbPersistence`; quiet when another tab holds the cache), **`requestPersistentStorage()`** (`navigator.storage.persist()` once per device, after the first created save) |
+| `src/data/edits.ts` | Field-level edits that settle when the server confirms: `moveSaveToTop`, `addTags` (arrayUnion), `removeTag` (arrayRemove), `setNote` (empty → deleteField), `setFavorite`, `trashSave`, `restoreSave`, `deleteSave` (tombstone), `hardDeleteSave` |
+| `src/data/appConfig.ts` | `watchAppConfig(cb)` → `RemoteConfig` (a `Partial<AppConfig>` from `config/app`; missing doc = nothing special) |
 | `src/data/profile.ts` | `ensureProfile(user)`: creates `users/{uid}` with `newUserDoc` if the server has none; checked once per device (localStorage flag), retried next time when offline |
-| `src/data/latest.ts` | `watchLatest(uid, n)`: live newest-first saves (`orderBy savedAt desc`, pending server times estimated) for `/app/`. **Temporary**: the step-5 sync engine replaces it |
-| `src/capture/saveLink.ts` | **`saveLink(uid, link, source)`** (§6.1 "As built"), `savePending(uid)`, quick actions `moveSaveToTop`, `addTags` (arrayUnion), `removeTag` (arrayRemove), `setNote` (empty → deleteField), and `watchSave(uid, id)` (tags, note, hasPendingWrites) |
+| `src/sync/state.ts` | Pure, unit-tested decisions of the sync engine (§6.5 "As built"): `SyncRecord`, `planSync` (full vs delta), `advanceWatermark`, `syncStatus`, `retryDelayMs` + `untilPacificMidnightMs`, `purgePlan`, and the constants (45-day full resync, 5-min slack, 30/60-day timeline, 15 s unreachable) |
+| `src/sync/engine.ts` | `startSync(uid, report)`: the delta listener with the persisted watermark (`ps:sync:<uid>` in localStorage), the cache sentinel, the `users/{uid}.syncEpoch` listener, retry with backoff (quota → Pacific midnight), reattach on `online`. Reports `{mode, caughtUp, error?, retryAtMs?}` |
+| `src/sync/library.ts` | `watchLibrary(uid)`: the whole library from the **device cache only** (`onSnapshot(…, { source: "cache" })`, never a server read) → `{saves (newest first), tombstones, pendingCount}`; `toLibrarySave` reads a document tolerantly (unknown fields ignored, missing ones defaulted) |
+| `src/sync/useLibrary.ts` | `useLibrary(uid)` → `Library` (`saves`, `tombstones`, `pendingCount`, `loaded`, `status`, `mode`, `pausedUntil?`, `problem?`); runs the purge once a day per device, 3 s after the first server snapshot |
+| `src/sync/state.test.ts` | 17 unit tests: plans, watermark, status, retry timing (Pacific midnight), the purge plan |
+| `src/capture/saveLink.ts` | **`saveLink(uid, link, source)`** (§6.1 "As built"), `savePending(uid)`, and `watchSave(uid, id)` (tags, note, hasPendingWrites) |
 | `src/capture/pending.ts` | The signed-out waiting list in IndexedDB (`ps-capture` / `pending`, keyed by the shared URL, max 100): `listPending`, `addPending`, `removePending` |
 | `src/capture/input.ts` | `readCapture(search, pageSource)` → `{hasInput, sharedText, link, source}`; `?src=` accepted only for web, share-android, bookmarklet, paste, extension |
 | `src/capture/useSave.ts` | `useSave(uid, link, source, onStored)` → `{sync: saving/pending/synced/failed, id, outcome, savedAt, error}` + retry; `useLiveSave(uid, id)` |
@@ -227,10 +234,10 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 | `src/auth/next.ts` | `safeNext(raw)`: only same-site paths, never `/login/` (no open redirect, no loop); `loginUrl(next)` |
 | `src/auth/session.ts` | `getAuth()` (`initializeAuth` with IndexedDB → localStorage persistence, device language, emulator when `useEmulators`; **no popup resolver at init**, so pages without Google sign-in don't load Google's iframe script). `signInWithGoogle(env)` (popup; falls back to redirect if blocked; redirect in the installed app; a sessionStorage flag marks a pending redirect), `completeGoogleRedirect()`, `signUpWithEmail` (creates + sends verification), `signInWithEmail`, `sendVerification` (continue URL `/login/?verified=1`; records the send time for the 60 s cooldown), `sendPasswordReset` (treats user-not-found as success, so it never reveals accounts), `refreshVerified()` (reload + force-refresh the ID token so the `email_verified` claim the rules check is current), `signOut`, `MIN_PASSWORD_LENGTH` (8) |
 | `src/auth/useAuth.ts` | `useAuth()` → `loading` / `signed-out` / `unverified` / `ready` (from `onIdTokenChanged`) |
-| `src/auth/*.test.ts` | 42 unit tests (57 in the app with capture): 20 real in-app/browser user agents, flows, open-in-browser links, messages, redirect safety |
+| `src/auth/*.test.ts` | 42 unit tests (74 in the app with capture and sync): 20 real in-app/browser user agents, flows, open-in-browser links, messages, redirect safety |
 | `src/ui/` | First design components: `Button` (primary gradient / secondary / link; sizes md = full width 48 px tap target, sm; `busy` spinner), `TextField` + `PasswordField` (Show/Hide), `Alert` (info/success/warning/error; role alert or status), `Spinner` + `PageSpinner`, `AuthLayout` (card on the landing's gradient background, for the sign-in and save pages) + `BrandLink`, `ButtonLink` (a link styled as a button), `TextArea`, `icons.tsx` (Google G, mail, check, alert, close), `cx()`. Links use `text-blue-600` in light mode, because the brand blue is only about 3:1 on white |
 | `src/pages/login/` | `LoginPage` (modes signin / signup / reset; notices from `?verified`/`?reset`; redirects to `next` when ready), `VerifyEmail` ("Check your email": re-checks on focus, when the tab becomes visible and every 10 s for 30 min; resend with a 60 s cooldown re-read every second; "Use a different account"), `InAppNotice` (Open in Chrome/Safari + Copy link, with a manual-copy fallback), `main.tsx` |
-| `src/pages/app/` | `AppPage`: sends signed-out and unverified visitors to `/login/?next=…`; when ready: `ensureProfile`, `savePending` (notice "The N links you shared before signing in are saved."), header (brand, email, Sign out), "Your library" + "Save a link", and `LatestSaves` (the 20 newest, live; "Syncing…" per row). The library replaces the list in step 7 |
+| `src/pages/app/` | `AppPage`: sends signed-out and unverified visitors to `/login/?next=…`; when ready: `ensureProfile`, `savePending` (notice "The N links you shared before signing in are saved."), header (brand, **`SyncStatus`**, email, Sign out → `clearLocalData()` then `signOut()`), `config/app` banners (maintenance, notice), the "sync paused" and "syncing stopped" alerts, "Your library" + "Save a link", `SavesList` (active saves from `useLibrary`, newest first; "Syncing…" per pending row) and a Trash count. `SyncStatus`: Synced (green) · Syncing… (spinner) · Offline (· N waiting) · Sync paused until tomorrow (amber); `data-sync-mode` full/delta for tests. The real library replaces the list in step 7 |
 | `src/pages/save/` | `SavePage` (used by `/save/` with source `web` and `/share/` with `share-android`): signed out/unverified with a link → `KeepForLater` (waiting list, "Sign in to save this"; `next=/save/`); no link in the input → `NoLink` + paste box; ready → `SaveResult`; no input → the waiting links (`Waiting`: one → full view, several → `SaveRow` list) or `Start` (paste box). `SaveResult`: "Saved" / "Already saved" (+ date, **Move to top**) / "Restored from Trash" / "Couldn't save" (+ Try again); status line "Syncing…" / "Synced to your library." / "Saved on this device. It syncs when you're back online."; `LinkPreview`; `QuickActions` (tags, note); Open library / Done (`finish()`: `window.close()`, else `/app/`); auto-closes 1.5 s after saving when opened as a popup unless touched. `PasteForm`, `messages.ts` (Firestore error code → sentence) |
 | `src/pages/share/main.tsx` | The share target entry: `<SavePage source="share-android" />` |
 | `src/generated/brand.css` | **Generated, git-ignored**: `:root{--brand-from;--brand-to;--brand-ink}` |
@@ -243,9 +250,10 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 |---|---|
 | `package.json` | `test:e2e` = `vite build --mode e2e --outDir dist-e2e` (in apps/web), then `firebase emulators:exec --config ../../firebase/firebase.json --only auth,firestore --project demo-post-saver 'playwright test'` (the Firestore emulator runs the real `firestore.rules`); `typecheck` |
 | `playwright.config.ts` | One worker, system Chrome, traces kept on failure, 1 retry on CI. `webServer` starts `./node_modules/.bin/vite preview` in apps/web **directly, not through pnpm**, because through pnpm Playwright couldn't stop it and the run hung |
-| `specs/emulator.ts` | Talks to the emulators' REST APIs: `createUser(request, email, verified)` → uid (admin `Bearer owner` to mark verified), `emailLink(request, email, type)` (the emulator's "sent" verify/reset links), `uniqueEmail`, `PASSWORD`; Firestore `readDoc(request, path)` (plain values, timestamps as ISO strings) and `writeDoc(request, path, data)` (Dates → timestamps), both as admin, bypassing the rules |
+| `specs/emulator.ts` | Talks to the emulators' REST APIs: `createUser(request, email, verified)` → uid (admin `Bearer owner` to mark verified), `emailLink(request, email, type)` (the emulator's "sent" verify/reset links), `uniqueEmail`, `PASSWORD`; Firestore `readDoc(request, path)` (plain values, timestamps as ISO strings) and `writeDoc(request, path, data, only?)` (Dates → timestamps; `only` = an update mask), both as admin, bypassing the rules |
 | `specs/fixtures.ts` | `test` with an automatic CSP guard (any "Content Security Policy"/"Refused to" console message fails the test), `watchCsp(page)` for extra pages/contexts, `signIn(page, email)` |
 | `specs/auth.spec.ts` | Covers: the CSP meta is present; sign-up → "Check your email" (cooldown running) → "not verified yet" → open the emailed link → `/app/`; an unverified sign-in asks to verify; wrong password; `/app/` → sign-in → back, then sign-out; `?next=//evil.example` lands on `/app/`; password reset looks the same for existing and unknown emails; inside Instagram's browser Google is disabled, "Open in Chrome" is an intent link, and email sign-in works |
+| `specs/sync.spec.ts` | 6 tests: a save and a tombstone written "from another device" appear/disappear live; the watermark persists and a return visit is a **delta** sync that picks up what changed meanwhile, and a `syncEpoch` bump forces a **full** one; a wiped IndexedDB (CDP `Storage.clearDataForOrigin`) → full resync with everything back; Offline → Synced; sign-out removes the `firestore/…` database; opening the library tombstones 31-day-old trash and hard-deletes a 62-day-old tombstone (a 10-day-old one stays) |
 | `specs/save.spec.ts` | 11 tests: IG share text → `instagram_{code}` doc with the canonical URL, sharing another form → "Already saved" → Move to top changes savedAt; tags + note stored (arrayUnion/remove); a second browser context sees the save live and as already saved; signed-out share → sign in → saved on `/save/`; new account → verify → saved; waiting links saved by `/app/` (notice); no link → paste box; offline save → "Saved on this device" → online → synced; **offline save of a post another device saved → "Already saved", original untouched**; trashed post → "Restored from Trash"; bookmarklet popup closes itself |
 
 **`apps/embed/`**: the embed sandbox (Phase 0 placeholder). devDeps: vite, `@postsaver/config`.
@@ -536,6 +544,18 @@ Limits: 100k requests/day (resets 00:00 UTC), **10 ms CPU** per request, 50 subr
 - **Status indicator:** Synced · Syncing… · Offline (N waiting) · **"Cloud sync paused until tomorrow — your saves are safe on this device"** when a `resource-exhausted` error arrives. Also `config/app.notice` banners.
 - **Migrations:** `schemaVersion` per doc; clients read old versions and upgrade lazily on the next edit.
 
+**As built (2026-09-30): step 5** (code map in §4.4: `apps/web/src/sync`, `src/data/edits.ts`, `tests/e2e/specs/sync.spec.ts`)
+- **Two listeners per account.** `watchLibrary` renders the whole library from the **device cache** (`onSnapshot` with `source: "cache"`, so it never costs a server read); `startSync` attaches **one delta listener**, `saves where updatedAt > watermark − 5 min`, which is what fills the cache. A visit costs the changed documents (+ 1 read each for `users/{uid}` and `config/app`).
+- **The watermark** is the highest server `updatedAt` in a snapshot that was in sync with the server (`fromCache == false`), ignoring documents with pending local writes (a pending server timestamp compares above every real one, so those docs match the local query but have no server time yet). It's stored per account in localStorage (`ps:sync:<uid>`: `watermarkMs`, `lastSyncMs`, `epoch`).
+- **Full resync** (`updatedAt > 0`) when: no record; the **cache sentinel** is missing (`getDocFromCache(users/{uid})` throws: the profile document is neither cached nor remembered as absent, which happens after a wipe or when persistence fell back to memory); `users/{uid}.syncEpoch` differs from the record's; or the last sync is over **45 days** old. Stale tombstones from before a hard delete stay in the cache and are filtered out; nothing else can be stale.
+- **Status:** paused (a `resource-exhausted` listener error) > offline (`navigator.onLine` false, or online without a server snapshot for 15 s) > syncing (not caught up, or pending writes) > synced. Pending writes are counted from the cache listener's `hasPendingWrites`.
+- **Listener errors** remove the listener, so the engine reattaches: quota → at the next Pacific midnight + 2 min; anything else → 30 s doubling to 15 min, and at once on the `online` event. Non-network codes are shown as "Syncing stopped: …".
+- **Delete timeline, client side:** once a day per device (`ps:purged:<uid>`), 3 s after the first server snapshot, trashed saves older than 30 days get a tombstone and tombstones older than 61 days are hard-deleted (the rules require 60; the extra day covers device clocks).
+- **Sign-out** wipes the device copy: `terminate()` + `clearIndexedDbPersistence()` before `signOut()`. With another tab open the clear is refused; it's skipped quietly (that tab signs out too).
+- **`config/app`:** `maintenance` → warning banner, `notice` → info banner on `/app/`. `minClientVersion` waits for the build id (step 11).
+- **`navigator.storage.persist()`** is requested once per device after the first created save (Chrome/Safari decide silently; Firefox asks once).
+- **Not yet:** in-memory search (MiniSearch, with the library in step 7); a real migration (there's only schema version 1; `toLibrarySave` already ignores unknown fields and defaults missing ones).
+
 ### 6.6 Library UI & embeds
 - **Landing:** hero, 3 steps, supported platforms, the privacy promise ("we store only links"), "better than the save button", FAQ, CTA. The current coming-soon version is live.
 - **Library `/app/`:**
@@ -602,7 +622,7 @@ Limits: 100k requests/day (resets 00:00 UTC), **10 ms CPU** per request, 50 subr
   - Terms/privacy links on sign-up (the legal pages don't exist yet; add them before beta).
   - A users/{uid} document (created with the first save in step 4/5).
   - Re-authentication (with delete account, step 10).
-  - Clearing the local Firestore cache on sign-out (step 5).
+  - ~~Clearing the local Firestore cache on sign-out~~ (done in step 5).
 - **v1.1 extension:** `firebase/auth/web-extension` (SDK ≥10.8). Email/password runs directly; Google runs through an offscreen document that iframes `<domain>/ext-auth/`, which calls `signInWithPopup`. Add `chrome-extension://<id>` to the authorized domains.
 
 ### 6.8 Privacy, legal & platform terms
@@ -757,8 +777,8 @@ Hostinger's original parking records (A @ → 147.79.69.170 / 91.108.106.12, CNA
 1. [x] `packages/core` URL engine + fixture suite (§6.2) (2026-09-29)
 2. [x] Firestore schema, rules and the rules test suite (§6.4) (2026-09-29; deployed to both projects)
 3. [x] Auth: popup/redirect by context, email verification, in-app-browser handling (§6.7) (2026-09-29; the owner confirmed Google + email sign-in)
-4. [x] `saveLink()`, `/save/`, `/share/`, offline queue, dedupe, pending/synced states (§6.1) (2026-09-29; **the owner's device test pending**)
-5. [ ] Sync engine + status UI (§6.5)
+4. [x] `saveLink()`, `/save/`, `/share/`, offline queue, dedupe, pending/synced states (§6.1) (2026-09-29; the owner confirmed phone ↔ laptop sync on 2026-09-30)
+5. [x] Sync engine + status UI (§6.5) (2026-09-30)
 6. [ ] Embed sandbox renderers + host component + fallbacks + preview consent (§6.6)
 7. [ ] Library features: grid/list, search, filters, collections, tags, notes, favorites, bulk actions, trash, unavailable
 8. [ ] Resolver Worker `/resolve`, `/meta`, `/batch` + the enrichment/retry queue (§6.3)
@@ -802,11 +822,7 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
    - Check the Firebase Hosting custom-domain status with:
      `curl -H "Authorization: Bearer $(gcloud auth print-access-token)" -H "x-goog-user-project: post-saver-prod" https://firebasehosting.googleapis.com/v1beta1/projects/post-saver-prod/sites/post-saver-prod/customDomains`
    - Expect `hostState` HOST_ACTIVE and the cert active.
-2. **Device test of saving (step 4)** on the OnePlus (Chrome) and desktop Chrome. Google and email sign-in were confirmed on 2026-09-29.
-   - Desktop: `https://<domain>/app/` → "Save a link" → paste an Instagram/YouTube link → "Saved · Synced". Paste it again → "Already saved" → Move to top.
-   - Phone: Chrome menu → "Add to Home screen" / "Install app". Then in Instagram: Share → the app → "Saved". Watch it appear on the laptop's `/app/` without reloading.
-   - Airplane mode on the phone with `/save/` already open: paste a link → "Saved on this device" → airplane mode off → "Synced".
-   - Still open from step 3: send yourself the `/login/` link in an Instagram DM, open it inside Instagram, and check the "Open in Chrome" button.
+2. Still open from step 3: send yourself the `/login/` link in an Instagram DM, open it inside Instagram, and check the "Open in Chrome" button. (Sign-in and saving on the OnePlus + laptop were confirmed on 2026-09-29/30.)
 
 **Deploying Firestore rules/indexes (owner, whenever a step changes `firebase/`):** Claude's auto-mode safety check blocks `firebase deploy`, so the owner runs this in the VS Code terminal, from the repo folder, and Claude verifies the result:
 `cd firebase && pnpm exec firebase deploy --only firestore --project dev && pnpm exec firebase deploy --only firestore --project prod`
@@ -844,9 +860,9 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
   - Instagram export parser
   - config generators: switching `domain` in a test config changes the CSP, manifest, CORS, sitemap and legal pages
 - `pnpm test:rules`: every rule case in §6.4.
-- `pnpm test:e2e` (Playwright + emulators). Built so far: the sign-in and save suites (§4.4 `tests/e2e`). Done: (1) sign-up → blocked until verified → verify → the pending save syncs; (2) `/share/?text=<IG link with igsh>` → canonical id, sharing again → "Already saved"; (3, partly) offline save → online → synced, and a second browser context sees saves live. Still to come:
+- `pnpm test:e2e` (Playwright + emulators). Built so far: the sign-in, save and sync suites (§4.4 `tests/e2e`). Done: (1) sign-up → blocked until verified → verify → the pending save syncs; (2) `/share/?text=<IG link with igsh>` → canonical id, sharing again → "Already saved"; (3, partly) offline save → online → synced, and a second browser context sees saves live; (4, partly) a tombstone from another device removes the row, a wiped cache triggers a full resync, the delete timeline runs on open. Still to come:
   3. Offline save → **reload** → online (needs the service worker, step 9/11).
-  4. Trash → restore → delete → the tombstone propagates; a wiped cache triggers a full resync.
+  4. Trash → restore → delete from the library UI (step 7).
   5. v1.2: REST `commit` to the inbox is moved into the library; revoked key, kill switch or oversize URL → rejected.
   6. A 1,200-item import with a cap of 500 → pauses and resumes the next day.
   7. Export matches the library; delete account leaves zero docs.
@@ -916,3 +932,9 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
   - **Tests:** 57 web unit tests; the browser suite runs the Firestore emulator too (real rules): 19 tests, 11 of them new for saving, including offline → online and the refused-offline-create → "Already saved" correction. Every browser test fails on a CSP violation.
   - **Caught before shipping:** the CSP guard found that Firestore's network layer loads `www.google.com/images/cleardot.gif` whenever the connection drops; allowed in `img-src` (harmless, statistics only).
   - **Screens checked** at phone width in light and dark: saved (tags, note), already saved, signed-out prompt, no link, paste box, library list.
+  - Pushed as `c36cc56`; CI (check, rules, e2e) and Deploy (web, embed, resolver) green. **Live check** (headless Chrome, phone viewport, signed out): `/save/`, `/share/`, `/app/` return 200 with Firestore in the CSP; the manifest serves the `share_target`; `/share/?text=<IG link>` shows "Sign in to save this" with the "Instagram reel" preview and clears the address bar; `/save/` sends visitors to `/login/?next=%2Fsave%2F`; no console errors.
+  - **2026-09-30:** the owner tested saving on the OnePlus and the laptop: saves sync between them.
+- **2026-09-30:** Phase 1, step 5: the sync engine + status UI.
+  - **Built:** `apps/web/src/sync` (pure `state.ts`, `engine.ts` with the persisted watermark and retry rules, cache-only `library.ts`, `useLibrary`), `data/edits.ts` (all edits incl. trash/restore/delete/hard delete), `data/appConfig.ts`, `clearLocalData()` on sign-out, `requestPersistentStorage()`, and the `/app/` header indicator + banners. The temporary `latest.ts` list is gone; `/app/` now renders every active save from the device cache.
+  - **Tests:** 17 unit tests for the engine's decisions (incl. Pacific-midnight retry timing); 6 browser tests that seed and change documents "from another device" through the emulator's admin REST API, wipe IndexedDB through CDP, and check the sync **mode** (`data-sync-mode`): a return visit is a delta sync, a wipe or an epoch bump is a full one. All 25 browser tests pass; `pnpm verify` green.
+  - **Screens checked** at phone width, light and dark: Synced / Offline in the header, the `config/app` notice banner.

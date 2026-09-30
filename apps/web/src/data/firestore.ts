@@ -1,16 +1,19 @@
 import {
   CACHE_SIZE_UNLIMITED,
+  clearIndexedDbPersistence,
   collection,
   connectFirestoreEmulator,
   doc,
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  terminate,
   type CollectionReference,
   type DocumentReference,
   type Firestore,
 } from "firebase/firestore";
 import { firebaseApp, useEmulators } from "../lib/firebase.ts";
+import { readLocal, writeLocal } from "../lib/storage.ts";
 
 let db: Firestore | undefined;
 
@@ -51,4 +54,33 @@ export function userRef(uid: string): DocumentReference {
 export function errorCode(error: unknown): string | undefined {
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === "string" ? code : undefined;
+}
+
+/**
+ * Wipes the device copy of the library (on sign-out, so a shared computer keeps nothing).
+ * Fails quietly when another tab still uses the cache; that tab signs out too, and the cache
+ * is cleared the next time.
+ */
+export async function clearLocalData(): Promise<void> {
+  if (!db) return;
+  const instance = db;
+  db = undefined;
+  try {
+    await terminate(instance);
+    await clearIndexedDbPersistence(instance);
+  } catch {
+    // Another tab holds the cache, or persistence was never on.
+  }
+}
+
+const PERSIST_KEY = "ps:storage-persist";
+
+/**
+ * Asks the browser not to evict this site's storage (the offline queue and the library copy).
+ * Once per device, after the first save. Chrome and Safari decide silently; Firefox asks once.
+ */
+export function requestPersistentStorage(): void {
+  if (readLocal(PERSIST_KEY) || !navigator.storage?.persist) return;
+  writeLocal(PERSIST_KEY, "1");
+  navigator.storage.persist().catch(() => undefined);
 }

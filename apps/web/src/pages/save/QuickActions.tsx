@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import { LIMITS, normalizeTags } from "@postsaver/core";
-import { addTags, removeTag, setNote } from "../../capture/saveLink.ts";
+import { addTags, removeTag, setNote } from "../../data/edits.ts";
 import { useLiveSave } from "../../capture/useSave.ts";
 import { errorMessage } from "./messages.ts";
 import { Alert } from "../../ui/Alert.tsx";

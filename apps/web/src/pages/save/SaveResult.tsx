@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ParsedLink, SaveSource } from "@postsaver/core";
-import { moveSaveToTop } from "../../capture/saveLink.ts";
+import { moveSaveToTop } from "../../data/edits.ts";
 import { useSave, type SaveState } from "../../capture/useSave.ts";
 import { describeLink, formatDay } from "../../lib/platforms.ts";
 import { useOnline } from "../../lib/useOnline.ts";

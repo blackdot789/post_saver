@@ -99,8 +99,12 @@ export async function readDoc(request: APIRequestContext, path: string): Promise
   return decodeFields(fields ?? {});
 }
 
-/** Writes a document as an admin would (Dates become timestamps). */
-export async function writeDoc(request: APIRequestContext, path: string, data: object): Promise<void> {
-  const res = await request.patch(`${DOCS}/${path}`, { headers: ADMIN, data: { fields: encodeFields(data as Record<string, unknown>) } });
+/**
+ * Writes a document as an admin would (Dates become timestamps). With `only`, changes just
+ * those fields and leaves the rest of the document alone.
+ */
+export async function writeDoc(request: APIRequestContext, path: string, data: object, only?: string[]): Promise<void> {
+  const mask = only ? "?" + only.map((f) => `updateMask.fieldPaths=${encodeURIComponent(f)}`).join("&") : "";
+  const res = await request.patch(`${DOCS}/${path}${mask}`, { headers: ADMIN, data: { fields: encodeFields(data as Record<string, unknown>) } });
   if (!res.ok()) throw new Error(`writeDoc ${path}: ${res.status()} ${await res.text()}`);
 }

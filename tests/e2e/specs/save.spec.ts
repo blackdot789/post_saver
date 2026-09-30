@@ -87,7 +87,7 @@ test("a save on one device shows up live on another, which sees it as already sa
   await expect(phone.getByText("Synced to your library.")).toBeVisible();
 
   // The laptop's library updates by itself.
-  await expect(page.getByRole("list", { name: "Latest saves" })).toContainText(IG_URL);
+  await expect(page.getByRole("list", { name: "Saves" })).toContainText(IG_URL);
 
   // Saving it on the laptop too: the server already has it.
   await page.goto(save({ url: IG_URL }));
@@ -149,7 +149,7 @@ test("the library saves links left waiting when sign-in happened somewhere else"
   await signIn(page, email);
   await expect(page).toHaveURL(/\/app\/$/);
   await expect(page.getByText("The 2 links you shared before signing in are saved.")).toBeVisible();
-  const list = page.getByRole("list", { name: "Latest saves" });
+  const list = page.getByRole("list", { name: "Saves" });
   await expect(list).toContainText("Instagram reel");
   await expect(list).toContainText("Pinterest Pin");
 });

@@ -1,6 +1,4 @@
 import {
-  arrayRemove,
-  arrayUnion,
   deleteField,
   getDocFromCache,
   getDocFromServer,
@@ -11,20 +9,9 @@ import {
   type DocumentData,
   type DocumentReference,
 } from "firebase/firestore";
-import {
-  LIMITS,
-  moveToTop,
-  newSave,
-  normalizeTags,
-  parse,
-  planSave,
-  restoreFromTrash,
-  saveId,
-  type ParsedLink,
-  type SaveSource,
-} from "@postsaver/core";
+import { moveToTop, newSave, parse, planSave, restoreFromTrash, saveId, type ParsedLink, type SaveSource } from "@postsaver/core";
 import { getAuth } from "../auth/session.ts";
-import { errorCode, saveRef } from "../data/firestore.ts";
+import { errorCode, requestPersistentStorage, saveRef } from "../data/firestore.ts";
 import { listPending, removePending } from "./pending.ts";
 
 // saveLink(): the one way every capture path saves a post (CLAUDE.md §6.1). The document id
@@ -116,6 +103,7 @@ async function run(uid: string, link: ParsedLink, source: SaveSource): Promise<S
   // Firestore runs local work in order, so once this read returns, the write is stored on the
   // device (in IndexedDB) and survives the page closing.
   if (first.saved.outcome !== "exists") await getDocFromCache(ref).catch(() => undefined);
+  if (first.saved.outcome === "created") requestPersistentStorage();
 
   const synced = (async (): Promise<Saved> => {
     try {
@@ -178,27 +166,6 @@ export async function savePending(uid: string): Promise<number> {
     await removePending(item.url);
   }
   return saved;
-}
-
-// ---------- quick actions ----------
-
-export function moveSaveToTop(uid: string, id: string): Promise<void> {
-  return updateDoc(saveRef(uid, id), moveToTop(serverTimestamp()));
-}
-
-export function addTags(uid: string, id: string, tags: readonly string[]): Promise<void> {
-  const clean = normalizeTags(tags);
-  if (clean.length === 0) return Promise.resolve();
-  return updateDoc(saveRef(uid, id), { tags: arrayUnion(...clean), updatedAt: serverTimestamp() });
-}
-
-export function removeTag(uid: string, id: string, tag: string): Promise<void> {
-  return updateDoc(saveRef(uid, id), { tags: arrayRemove(tag), updatedAt: serverTimestamp() });
-}
-
-export function setNote(uid: string, id: string, note: string): Promise<void> {
-  const text = note.trim().slice(0, LIMITS.note);
-  return updateDoc(saveRef(uid, id), { note: text || deleteField(), updatedAt: serverTimestamp() });
 }
 
 export interface LiveSave {

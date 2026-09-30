@@ -1,22 +1,10 @@
-import { useEffect, useState } from "react";
-import { watchLatest, type SaveRow } from "../../data/latest.ts";
 import { authorLabel, describeLink, formatDay } from "../../lib/platforms.ts";
-import { errorMessage } from "../save/messages.ts";
-import { Alert } from "../../ui/Alert.tsx";
+import type { LibrarySave } from "../../sync/library.ts";
 import { ButtonLink } from "../../ui/Button.tsx";
-import { PageSpinner } from "../../ui/Spinner.tsx";
 
-const COUNT = 20;
-
-/** The newest saves as a plain list, updating live (a post shared on the phone appears here). */
-export function LatestSaves({ uid }: { uid: string }) {
-  const [rows, setRows] = useState<SaveRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => watchLatest(uid, COUNT, setRows, (e) => setError(errorMessage(e))), [uid]);
-
-  if (error) return <Alert tone="error">{error}</Alert>;
-  if (!rows) return <PageSpinner label="Loading your saves…" />;
-  if (rows.length === 0) {
+/** The saves as a plain list, newest first. The real library (grid, search, filters) is step 7. */
+export function SavesList({ saves }: { saves: LibrarySave[] }) {
+  if (saves.length === 0) {
     return (
       <div className="rounded-3xl border border-dashed border-slate-300 px-6 py-12 text-center dark:border-white/15">
         <p className="text-lg font-semibold">Nothing saved yet</p>
@@ -30,8 +18,8 @@ export function LatestSaves({ uid }: { uid: string }) {
     );
   }
   return (
-    <ul aria-label="Latest saves" className="divide-y divide-slate-200 rounded-3xl border border-slate-200 bg-white/60 px-5 dark:divide-white/10 dark:border-white/10 dark:bg-white/5">
-      {rows.map((row) => (
+    <ul aria-label="Saves" className="divide-y divide-slate-200 rounded-3xl border border-slate-200 bg-white/60 px-5 dark:divide-white/10 dark:border-white/10 dark:bg-white/5">
+      {saves.map((row) => (
         <li key={row.id} className="flex items-start justify-between gap-4 py-4">
           <div className="min-w-0">
             <p className="text-sm font-semibold">
