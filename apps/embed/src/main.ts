@@ -1,12 +1,20 @@
 /**
- * Embed sandbox (runs on its own origin so platform scripts can never reach the main app's
- * storage or sign-in session). Per-platform renderers land in Phase 1; for now it only
- * answers the parent so the host component can be wired up and tested.
+ * The embed sandbox (CLAUDE.md §6.6). It runs on its own origin, so platform scripts can never
+ * reach the main app's storage or sign-in session. The parent (the main app) says what to show
+ * in the URL fragment, e.g. #p=youtube&id=…&theme=dark; this page validates it, renders it with
+ * the platform's official embed, and reports back with postMessage:
+ *   { type: "ps:status", status: "ok" | "unavailable" | "blocked", reason? }
+ *   { type: "ps:height", height }
+ * Messages go only to a parent origin from the config, and only such a parent is served.
  */
 import { origins } from "@postsaver/config";
+import { paramsToEmbed, themeFromParams } from "@postsaver/core";
+import { render, type Status } from "./render.ts";
 
 const allowedParents = new Set<string>([origins.app, origins.www]);
 if (import.meta.env.DEV) allowedParents.add("http://localhost:5173");
+// End-to-end test builds: the main app's preview server.
+if (import.meta.env.VITE_PARENT_ORIGIN) allowedParents.add(import.meta.env.VITE_PARENT_ORIGIN);
 
 function parentOrigin(): string | null {
   try {
@@ -17,7 +25,41 @@ function parentOrigin(): string | null {
   }
 }
 
-const target = parentOrigin();
-if (target && window.parent !== window) {
-  window.parent.postMessage({ type: "ps:status", status: "unavailable", reason: "not-implemented" }, target);
+const root = document.getElementById("frame");
+const parent = parentOrigin();
+
+function say(message: Record<string, unknown>): void {
+  if (parent && window.parent !== window) window.parent.postMessage(message, parent);
 }
+
+function reportStatus(status: Status, reason?: string): void {
+  say({ type: "ps:status", status, ...(reason ? { reason } : {}) });
+}
+
+function reportHeight(): void {
+  if (root) say({ type: "ps:height", height: Math.ceil(root.getBoundingClientRect().height) });
+}
+
+async function main(): Promise<void> {
+  if (!root) return;
+  if (!parent || window.parent === window) {
+    root.textContent = "This page shows post previews inside the app.";
+    return;
+  }
+  const params = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const theme = themeFromParams(params);
+  document.documentElement.dataset.theme = theme;
+  const embed = paramsToEmbed(params);
+  if (!embed) return reportStatus("unavailable", "bad-link");
+
+  new ResizeObserver(reportHeight).observe(root);
+  try {
+    const status = await render(embed, { root, theme, width: root.clientWidth || document.documentElement.clientWidth });
+    reportStatus(status);
+  } catch (error) {
+    reportStatus("blocked", error instanceof Error ? error.message : "error");
+  }
+  reportHeight();
+}
+
+void main();

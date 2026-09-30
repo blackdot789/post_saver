@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { site, origins } from "@postsaver/config";
@@ -12,7 +12,11 @@ const here = (p: string) => resolve(import.meta.dirname, p);
 export default defineConfig(({ mode }) => ({
   plugins: [
     siteConfigPlugin({
-      csp: () => mainSiteCsp({ emulators: mode === "e2e" }),
+      csp: () =>
+        mainSiteCsp({
+          emulators: mode === "e2e",
+          ...(mode === "e2e" ? { embedOrigin: loadEnv(mode, import.meta.dirname, "VITE_").VITE_EMBED_ORIGIN } : {}),
+        }),
       brandCssPath: here("src/generated/brand.css"),
       files: () => ({
         "robots.txt": `User-agent: *\nAllow: /\nDisallow: /app/\nDisallow: /login/\nDisallow: /save/\nDisallow: /share/\n\nSitemap: ${origins.app}/sitemap.xml\n`,

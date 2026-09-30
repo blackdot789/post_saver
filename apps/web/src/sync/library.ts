@@ -28,6 +28,7 @@ export interface LibrarySave {
   createdAt?: Date;
   updatedAt?: Date;
   embedStatus: EmbedStatus;
+  embedCheckedAt?: Date;
   needsResolve: boolean;
   needsMeta: boolean;
   schemaVersion: number;
@@ -84,6 +85,7 @@ export function toLibrarySave(id: string, data: DocumentData, pending: boolean):
     ...date("createdAt"),
     ...date("updatedAt"),
     embedStatus: data.embedStatus === "ok" || data.embedStatus === "unavailable" ? data.embedStatus : "unknown",
+    ...date("embedCheckedAt"),
     needsResolve: data.needsResolve === true,
     needsMeta: data.needsMeta !== false,
     schemaVersion: typeof data.schemaVersion === "number" ? data.schemaVersion : 1,

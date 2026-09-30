@@ -48,3 +48,8 @@ export function deleteSave(uid: string, id: string): Promise<void> {
 export function hardDeleteSave(uid: string, id: string): Promise<void> {
   return deleteDoc(saveRef(uid, id));
 }
+
+/** Records the sandbox's verdict on the embed, so other devices skip a post that's gone. */
+export function setEmbedStatus(uid: string, id: string, status: "ok" | "unavailable"): Promise<void> {
+  return updateDoc(saveRef(uid, id), { embedStatus: status, embedCheckedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}

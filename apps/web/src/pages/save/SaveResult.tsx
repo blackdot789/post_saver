@@ -59,10 +59,12 @@ interface SaveResultProps {
   onStored?: () => void;
   /** Close the window once saved (the page was opened as a popup, e.g. by the bookmarklet). */
   autoClose?: boolean;
+  /** Inside the library's Add dialog: no "Open library" / "Done" buttons. */
+  compact?: boolean;
 }
 
 /** Saves one link and shows how it went, with quick actions (the main /save/ and /share/ view). */
-export function SaveResult({ uid, link, source, onStored, autoClose = false }: SaveResultProps) {
+export function SaveResult({ uid, link, source, onStored, autoClose = false, compact = false }: SaveResultProps) {
   const [state, retry] = useSave(uid, link, source, onStored);
   const online = useOnline();
   const [moved, setMoved] = useState(false);
@@ -121,12 +123,14 @@ export function SaveResult({ uid, link, source, onStored, autoClose = false }: S
 
       {state.id && state.sync !== "failed" && <QuickActions uid={uid} id={state.id} />}
 
-      <div className="mt-6 grid grid-cols-2 gap-3">
-        <ButtonLink href="/app/" variant="secondary">
-          Open library
-        </ButtonLink>
-        <Button onClick={finish}>Done</Button>
-      </div>
+      {!compact && (
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <ButtonLink href="/app/" variant="secondary">
+            Open library
+          </ButtonLink>
+          <Button onClick={finish}>Done</Button>
+        </div>
+      )}
     </div>
   );
 }

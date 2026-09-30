@@ -32,7 +32,7 @@ test("email sign-up: blocked until the address is verified, then the library ope
 
   await page.getByRole("button", { name: "I've verified it" }).click();
   await expect(page).toHaveURL(/\/app\/$/);
-  await expect(page.getByRole("heading", { name: "Your library" })).toBeVisible();
+  await expect(page.getByText("Nothing saved yet")).toBeVisible();
 });
 
 test("an unverified account that signs in is asked to verify", async ({ page, request }) => {
@@ -61,7 +61,8 @@ test("the library sends visitors to sign in and back, and sign-out returns to si
 
   await signIn(page, email);
   await expect(page).toHaveURL(/\/app\/$/);
-  await expect(page.getByText(email)).toBeVisible();
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByRole("dialog").getByText(email)).toBeVisible();
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login\//);

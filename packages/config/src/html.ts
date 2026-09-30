@@ -42,10 +42,12 @@ function escapeHtml(value: string): string {
 export interface CspOptions {
   /** Allow the local Firebase emulators (end-to-end test builds only). */
   emulators?: boolean;
+  /** Where the embed sandbox is served from, when not embed.<domain> (end-to-end test builds only). */
+  embedOrigin?: string;
 }
 
 /** Content-Security-Policy for the main site, derived from config. Extended as features land. */
-export function mainSiteCsp({ emulators = false }: CspOptions = {}): string {
+export function mainSiteCsp({ emulators = false, embedOrigin = origins.embed }: CspOptions = {}): string {
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
     // Firebase Auth's popup/redirect sign-in loads Google's iframe helper script.
@@ -64,7 +66,7 @@ export function mainSiteCsp({ emulators = false }: CspOptions = {}): string {
       ...(emulators ? ["http://127.0.0.1:9099", "http://127.0.0.1:8080"] : []),
     ],
     // The embed sandbox, and the sign-in helper frame on auth.<domain>.
-    "frame-src": [origins.embed, origins.auth],
+    "frame-src": [embedOrigin, origins.auth],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],
     "form-action": ["'self'"],

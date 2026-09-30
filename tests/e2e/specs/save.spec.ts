@@ -150,8 +150,8 @@ test("the library saves links left waiting when sign-in happened somewhere else"
   await expect(page).toHaveURL(/\/app\/$/);
   await expect(page.getByText("The 2 links you shared before signing in are saved.")).toBeVisible();
   const list = page.getByRole("list", { name: "Saves" });
-  await expect(list).toContainText("Instagram reel");
-  await expect(list).toContainText("Pinterest Pin");
+  await expect(list).toContainText("instagram.com/reel/C8xYz12AbCd");
+  await expect(list).toContainText("pinterest.com/pin/123456789012345678");
 });
 
 test("shared text without a link says so, and a pasted link saves", async ({ page, request }) => {

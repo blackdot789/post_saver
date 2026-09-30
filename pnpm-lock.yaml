@@ -187,6 +187,9 @@ importers:
       '@postsaver/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@postsaver/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@types/node':
         specifier: ^26.6.3
         version: 26.6.3
@@ -202,6 +205,9 @@ importers:
       firebase:
         specifier: ^12.19.0
         version: 12.19.0
+      minisearch:
+        specifier: ^7.2.0
+        version: 7.2.0
       react:
         specifier: ^19.3.0
         version: 19.3.0
@@ -3266,6 +3272,9 @@ packages:
   minipass@7.1.3:
     resolution: {integrity: sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==}
     engines: {node: '>=16 || 14 >=14.17'}
+
+  minisearch@7.2.0:
+    resolution: {integrity: sha512-dqT2XBYUOZOiC5t2HRnwADjhNS2cecp9u+TJRiJ1Qp/f5qjkeT5APcGPjHw+bz89Ms8Jp+cG4AlE+QZ/QnDglg==}
 
   minizlib@3.1.0:
     resolution: {integrity: sha512-KZxYo1BUkWD2TVFLr0MQoM8vUUigWD3LlD83a/75BqC+4qE0Hb1Vo5v1FgcfaNXvfXzr+5EhQ6ing/CaBijTlw==}
@@ -7219,6 +7228,8 @@ snapshots:
   minimist@1.2.8: {}
 
   minipass@7.1.3: {}
+
+  minisearch@7.2.0: {}
 
   minizlib@3.1.0:
     dependencies:

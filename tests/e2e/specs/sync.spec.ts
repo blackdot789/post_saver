@@ -113,6 +113,7 @@ test("signing out wipes the device copy of the library", async ({ page, request 
   const before = await page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name ?? ""));
   expect(before.some((n) => n.startsWith("firestore/"))).toBe(true);
 
+  await page.getByRole("button", { name: "Settings" }).click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login\//);
   const after = await page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name ?? ""));

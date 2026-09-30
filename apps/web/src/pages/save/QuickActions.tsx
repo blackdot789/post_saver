@@ -11,7 +11,7 @@ import { TextArea } from "../../ui/TextField.tsx";
 // Edits go to the device cache at once and sync like the save itself, so nothing here waits on
 // the network; the promises only settle when the server confirms (or refuses).
 
-function TagEditor({ uid, id, tags, fail }: { uid: string; id: string; tags: string[]; fail: (e: unknown) => void }) {
+export function TagEditor({ uid, id, tags, fail }: { uid: string; id: string; tags: string[]; fail: (e: unknown) => void }) {
   const inputId = useId();
   const [draft, setDraft] = useState("");
   const room = LIMITS.tags - tags.length;
@@ -67,7 +67,7 @@ function TagEditor({ uid, id, tags, fail }: { uid: string; id: string; tags: str
   );
 }
 
-function NoteEditor({ uid, id, note, fail }: { uid: string; id: string; note: string; fail: (e: unknown) => void }) {
+export function NoteEditor({ uid, id, note, fail }: { uid: string; id: string; note: string; fail: (e: unknown) => void }) {
   // null while not editing, so a note changed on another device shows up here.
   const [draft, setDraft] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);

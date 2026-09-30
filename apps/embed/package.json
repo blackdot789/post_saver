@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@postsaver/config": "workspace:*",
+    "@postsaver/core": "workspace:*",
     "@types/node": "^26.6.3",
     "vite": "^8.3.1"
   }
