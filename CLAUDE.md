@@ -1110,3 +1110,4 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
   - **Delete account** (`src/account`): re-authentication, then everything the account owns, the sign-in and the device's copies; resumable.
   - **Caught by the tests:** an import started before `config/app` had loaded used the default limit of 500 instead of the remote one (it now waits for the config).
   - **Tests:** 125 web unit tests (24 new), 64 browser tests (8 new). No rules change.
+  - Pushed as `107efd2`; CI (check, rules, e2e) and Deploy (web, embed, resolver) green. **Live check** (headless Chrome with an Android user agent, signed out): `/app/`, `/setup/`, `/save/`, `/share/`, `/login/` return 200; `/sw.js` is served as JavaScript, installs and keeps 27 files; the manifest has the share target and both shortcuts; `/setup/` sends visitors to `/login/?next=%2Fsetup%2F`; **with the network off, `/share/?text=…` still opens** ("Sign in to save this"); no console errors.
