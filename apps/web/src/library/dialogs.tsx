@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
-import { LIMITS, normalizeTags, type ParsedLink, type UserSettings } from "@postsaver/core";
+import { LIMITS, normalizeTags, type UserSettings } from "@postsaver/core";
+import { itemKey, type Item } from "../capture/item.ts";
 import { addToCollection, cleanName, createCollection, deleteCollection, removeFromCollection, renameCollection, type Collection } from "../data/collections.ts";
 import { addTags } from "../data/edits.ts";
 import type { Previews, Theme } from "../data/settings.ts";
@@ -222,19 +223,20 @@ export function ConfirmDialog({ title, body, action, onConfirm, onClose }: { tit
   );
 }
 
-export function AddDialog({ uid, onClose }: { uid: string; onClose: () => void }) {
-  const [link, setLink] = useState<ParsedLink | null>(null);
+/** `initial` fills the box, e.g. with what was just pasted onto the library page. */
+export function AddDialog({ uid, initial, onClose }: { uid: string; initial?: string; onClose: () => void }) {
+  const [item, setItem] = useState<Item | null>(null);
   return (
-    <Dialog open onClose={onClose} title={link ? "Saved" : "Save a link"}>
-      {link ? (
+    <Dialog open onClose={onClose} title={item ? "Saved" : "Add to your library"}>
+      {item ? (
         <>
-          <SaveResult key={link.canonicalUrl} uid={uid} link={link} source="paste" compact />
-          <Button variant="link" className="mt-4 text-sm" onClick={() => setLink(null)}>
-            Save another link
+          <SaveResult key={itemKey(item)} uid={uid} item={item} source="paste" compact />
+          <Button variant="link" className="mt-4 text-sm" onClick={() => setItem(null)}>
+            Add another
           </Button>
         </>
       ) : (
-        <PasteForm onLink={setLink} autoFocus />
+        <PasteForm onItem={setItem} initial={initial} autoFocus />
       )}
     </Dialog>
   );

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { parse, type Embed, type EmbedTheme, type Platform } from "@postsaver/core";
 import { PLATFORM_NAMES } from "../lib/platforms.ts";
-import type { LibrarySave } from "../sync/library.ts";
+import type { LinkSave } from "../sync/library.ts";
 import { Button } from "../ui/Button.tsx";
 import { cx } from "../ui/cx.ts";
 import { EmbedFrame, type FrameStatus } from "./EmbedFrame.tsx";
@@ -26,7 +26,7 @@ const LINK_CARD_WITH_ACTION_HEIGHT = 118;
 const FOLD_BAR_HEIGHT = 37;
 
 export interface PreviewProps {
-  save: LibrarySave;
+  save: LinkSave;
   theme: EmbedTheme;
   /** "always": load when near the viewport · "click": only after a tap. */
   mode: "always" | "click";
@@ -62,12 +62,12 @@ function embedFor(url: string): Embed | null {
   return embed;
 }
 
-function knownGone(save: LibrarySave): boolean {
+function knownGone(save: LinkSave): boolean {
   return save.embedStatus === "unavailable" && (!save.embedCheckedAt || Date.now() - save.embedCheckedAt.getTime() < RECHECK_AFTER_MS);
 }
 
 /** Roughly how tall a save's preview is in a card this wide, before it has been measured. */
-export function estimatePreviewHeight(save: LibrarySave, width: number, mode: "always" | "click", disabledPlatforms: readonly Platform[]): number {
+export function estimatePreviewHeight(save: LinkSave, width: number, mode: "always" | "click", disabledPlatforms: readonly Platform[]): number {
   if (!embedFor(save.url) || disabledPlatforms.includes(save.platform)) return LINK_CARD_HEIGHT;
   if (mode === "click" || knownGone(save)) return LINK_CARD_WITH_ACTION_HEIGHT;
   const known = rememberedSize(save.id, width);

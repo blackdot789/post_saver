@@ -9,15 +9,16 @@ import {
   type DocumentData,
   type DocumentReference,
 } from "firebase/firestore";
-import { moveToTop, newSave, parse, planSave, restoreFromTrash, saveId, type ParsedLink, type SaveSource } from "@postsaver/core";
+import { cleanText, moveToTop, newSave, newText, parse, planSave, restoreFromTrash, saveId, textId, type SaveSource } from "@postsaver/core";
 import { getAuth } from "../auth/session.ts";
 import { errorCode, requestPersistentStorage, saveRef } from "../data/firestore.ts";
+import { itemKey, type Item } from "./item.ts";
 import { listPending, removePending } from "./pending.ts";
 
-// saveLink(): the one way every capture path saves a post (CLAUDE.md §6.1). The document id
-// comes from the link, so saving the same post twice, from any device, never makes a duplicate.
-// The write is never awaited: the device cache applies it at once, and Firestore sends it when
-// it can, even after the page is closed.
+// saveItem(): the one way every capture path saves a post or a text (CLAUDE.md §6.1). The
+// document id comes from the link (or the text), so saving the same thing twice, from any
+// device, never makes a duplicate. The write is never awaited: the device cache applies it at
+// once, and Firestore sends it when it can, even after the page is closed.
 
 export type SaveOutcome = "created" | "restored" | "exists";
 
@@ -77,14 +78,14 @@ function toDate(value: unknown): Date | undefined {
 /** Applies the plan for what's stored. `done` settles when the server has the write. */
 function write(
   ref: DocumentReference,
-  link: ParsedLink,
+  item: Item,
   source: SaveSource,
   stored: DocumentData | null | undefined,
 ): { saved: Saved; done: Promise<void> } {
   const now = serverTimestamp();
   switch (planSave(stored)) {
     case "create":
-      return { saved: { outcome: "created" }, done: setDoc(ref, newSave(link, { source, now })) };
+      return { saved: { outcome: "created" }, done: setDoc(ref, item.link ? newSave(item.link, { source, now }) : newText(item.text, { source, now })) };
     case "restore":
       return {
         saved: { outcome: "restored" },
@@ -95,11 +96,11 @@ function write(
   }
 }
 
-async function run(uid: string, link: ParsedLink, source: SaveSource): Promise<SaveResult> {
-  const id = await saveId(link);
+async function run(uid: string, item: Item, source: SaveSource): Promise<SaveResult> {
+  const id = item.link ? await saveId(item.link) : await textId(item.text);
   const ref = saveRef(uid, id);
   const seen = await lookup(ref);
-  const first = write(ref, link, source, seen.stored);
+  const first = write(ref, item, source, seen.stored);
   // Firestore runs local work in order, so once this read returns, the write is stored on the
   // device (in IndexedDB) and survives the page closing.
   if (first.saved.outcome !== "exists") await getDocFromCache(ref).catch(() => undefined);
@@ -124,7 +125,7 @@ async function run(uid: string, link: ParsedLink, source: SaveSource): Promise<S
       await getAuth().currentUser?.getIdToken(true);
     }
     const snap = await getDocFromServer(ref);
-    const second = write(ref, link, source, snap.exists() ? snap.data() : null);
+    const second = write(ref, item, source, snap.exists() ? snap.data() : null);
     await second.done;
     return second.saved;
   })();
@@ -132,15 +133,15 @@ async function run(uid: string, link: ParsedLink, source: SaveSource): Promise<S
   return { id, ...first.saved, synced };
 }
 
-// One save per link at a time, so a double tap (or React's double effects in development)
+// One save per item at a time, so a double tap (or React's double effects in development)
 // can't race itself.
 const inflight = new Map<string, Promise<SaveResult>>();
 
-export function saveLink(uid: string, link: ParsedLink, source: SaveSource): Promise<SaveResult> {
-  const key = `${uid} ${link.canonicalUrl}`;
+export function saveItem(uid: string, item: Item, source: SaveSource): Promise<SaveResult> {
+  const key = `${uid} ${itemKey(item)}`;
   let result = inflight.get(key);
   if (!result) {
-    result = run(uid, link, source);
+    result = run(uid, item, source);
     inflight.set(key, result);
     result
       .then((r) => r.synced)
@@ -150,20 +151,30 @@ export function saveLink(uid: string, link: ParsedLink, source: SaveSource): Pro
   return result;
 }
 
+/** What a waiting entry (pending.ts) saves; null when it no longer holds anything usable. */
+export function pendingItem(entry: { url: string; text?: string }): Item | null {
+  if (entry.text !== undefined) {
+    const text = cleanText(entry.text);
+    return text ? { text } : null;
+  }
+  const link = parse(entry.url);
+  return link ? { link } : null;
+}
+
 /**
- * Saves the links that were shared while signed out (see pending.ts) and returns how many.
- * Each leaves the waiting list once its write is in the device cache, from where Firestore
- * sends it.
+ * Saves the links and texts that were shared while signed out (see pending.ts) and returns how
+ * many. Each leaves the waiting list once its write is in the device cache, from where
+ * Firestore sends it.
  */
 export async function savePending(uid: string): Promise<number> {
   let saved = 0;
-  for (const item of await listPending()) {
-    const link = parse(item.url);
-    if (link) {
-      await saveLink(uid, link, item.source);
+  for (const entry of await listPending()) {
+    const item = pendingItem(entry);
+    if (item) {
+      await saveItem(uid, item, entry.source);
       saved++;
     }
-    await removePending(item.url);
+    await removePending(entry.url);
   }
   return saved;
 }

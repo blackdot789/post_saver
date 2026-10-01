@@ -1,4 +1,4 @@
-import { PLATFORMS, type Platform } from "@postsaver/core";
+import { SAVE_PLATFORMS, type SavePlatform } from "@postsaver/core";
 import type { LibrarySave } from "../sync/library.ts";
 
 // What the library shows, kept in /app/'s query string (CLAUDE.md §4.3: state inside /app/
@@ -12,7 +12,7 @@ export interface LibraryQuery {
   view: View;
   collection?: string;
   tag?: string;
-  platform?: Platform;
+  platform?: SavePlatform;
   q: string;
   sort: Sort;
 }
@@ -26,14 +26,14 @@ export function parseQuery(search: string): LibraryQuery {
   const p = new URLSearchParams(search);
   const view = p.get("view") as View | null;
   const sort = p.get("sort") as Sort | null;
-  const platform = p.get("platform") as Platform | null;
+  const platform = p.get("platform") as SavePlatform | null;
   const collection = p.get("collection")?.trim();
   const tag = p.get("tag")?.trim().toLowerCase();
   return {
     view: view && VIEWS.includes(view) ? view : "all",
     ...(collection && /^[A-Za-z0-9]{1,40}$/.test(collection) ? { collection } : {}),
     ...(tag ? { tag } : {}),
-    ...(platform && PLATFORMS.includes(platform) ? { platform } : {}),
+    ...(platform && SAVE_PLATFORMS.includes(platform) ? { platform } : {}),
     q: p.get("q")?.trim() ?? "",
     sort: sort && SORTS.includes(sort) ? sort : "newest",
   };
@@ -89,8 +89,8 @@ export function tagCounts(saves: readonly LibrarySave[]): Array<{ tag: string; c
   return [...counts].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
 
-/** Platforms with at least one live save, in the config's order. */
-export function platformsInUse(saves: readonly LibrarySave[]): Platform[] {
-  const used = new Set(saves.filter((s) => s.status === "active").map((s) => s.platform));
-  return PLATFORMS.filter((p) => used.has(p));
+/** Platforms (and "text") with at least one live save, in the config's order. */
+export function platformsInUse(saves: readonly LibrarySave[]): SavePlatform[] {
+  const used = new Set<SavePlatform>(saves.filter((s) => s.status === "active").map((s) => s.platform));
+  return SAVE_PLATFORMS.filter((p) => used.has(p));
 }

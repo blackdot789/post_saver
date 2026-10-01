@@ -1,6 +1,6 @@
 import { arrayUnion, doc, serverTimestamp, setDoc, Timestamp, updateDoc } from "firebase/firestore";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { newSave, parse, type SaveSource } from "@postsaver/core";
+import { newSave, newText, parse, type SaveSource } from "@postsaver/core";
 import type { RemoteConfig } from "../data/appConfig.ts";
 import { createCollection, newCollectionId, type Collection } from "../data/collections.ts";
 import { trashSave } from "../data/edits.ts";
@@ -158,11 +158,12 @@ export function useImport(uid: string, library: Library, collections: readonly C
       const now = serverTimestamp();
       if (at < next.add.length) {
         const entry = next.add[at]!;
-        const link = parse(entry.url);
+        const link = entry.text ? null : parse(entry.url);
         // Saved some other way since the import was planned: nothing to do.
-        if (!link || have.has(entry.id)) continue;
+        if ((!link && !entry.text) || have.has(entry.id)) continue;
+        const options = { source, now, savedAt: entry.savedAt ? Timestamp.fromMillis(entry.savedAt) : now, tags: entry.tags, note: entry.note };
         setDoc(saveRef(next.uid, entry.id), {
-          ...newSave(link, { source, now, savedAt: entry.savedAt ? Timestamp.fromMillis(entry.savedAt) : now, tags: entry.tags, note: entry.note }),
+          ...(link ? newSave(link, options) : newText(entry.text ?? "", options)),
           collectionIds: entry.collections.map(collectionId),
           ...(entry.favorite ? { favorite: true } : {}),
           // A title from the file is enough for an ordinary page: no lookup needed.

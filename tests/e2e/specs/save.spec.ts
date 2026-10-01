@@ -148,23 +148,20 @@ test("the library saves links left waiting when sign-in happened somewhere else"
   await page.goto("/login/");
   await signIn(page, email);
   await expect(page).toHaveURL(/\/app\/$/);
-  await expect(page.getByText("The 2 links you shared before signing in are saved.")).toBeVisible();
+  await expect(page.getByText("The 2 things you shared before signing in are saved.")).toBeVisible();
   const list = page.getByRole("list", { name: "Saves" });
   await expect(list).toContainText("instagram.com/reel/C8xYz12AbCd");
   await expect(list).toContainText("pinterest.com/pin/123456789012345678");
 });
 
-test("shared text without a link says so, and a pasted link saves", async ({ page, request }) => {
+test("a page address that can't be saved says so, and a pasted link saves", async ({ page, request }) => {
   const { uid } = await signedIn(page, request);
-  await page.goto(share({ title: "Hello", text: "just some words" }));
+  // What the bookmarklet sends from one of the browser's own pages.
+  await page.goto(save({ url: "chrome://settings", src: "bookmarklet" }));
   await expect(page.getByRole("heading", { name: "No link found" })).toBeVisible();
-  await expect(page.getByText("just some words")).toBeVisible();
+  await expect(page.getByText("chrome://settings")).toBeVisible();
 
-  await page.getByLabel("Link to a post").fill("not a link");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("doesn't look like a link");
-
-  await page.getByLabel("Link to a post").fill("youtu.be/dQw4w9WgXcQ");
+  await page.getByLabel("Link or text").fill("youtu.be/dQw4w9WgXcQ");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Synced to your library.")).toBeVisible();
   expect(await saveDoc(request, uid, "youtube_dQw4w9WgXcQ")).toMatchObject({ source: "paste" });
@@ -176,7 +173,7 @@ test("a save made offline waits on the device and syncs when the connection is b
   await expect(page.getByRole("heading", { name: "Save a post" })).toBeVisible();
 
   await context.setOffline(true);
-  await page.getByLabel("Link to a post").fill("https://www.tiktok.com/@creator/video/7234567890123456789?is_from_webapp=1");
+  await page.getByLabel("Link or text").fill("https://www.tiktok.com/@creator/video/7234567890123456789?is_from_webapp=1");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Saved", exact: true })).toBeVisible();
   await expect(page.getByText("Saved on this device. It syncs when you're back online.")).toBeVisible();
@@ -198,14 +195,18 @@ test("an offline save of a post another device already saved turns into 'Already
   await expect(page.getByRole("heading", { name: "Save a post" })).toBeVisible();
 
   await context.setOffline(true);
-  await page.getByLabel("Link to a post").fill(IG_SHARE);
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  // Words with a link in them: the box asks which of the two to save.
+  await page.getByLabel("Link or text").fill(IG_SHARE);
+  await page.getByRole("button", { name: "Save the link" }).click();
   await expect(page.getByText("Saved on this device. It syncs when you're back online.")).toBeVisible();
 
   await context.setOffline(false);
   await expect(page.getByRole("heading", { name: "Already saved" })).toBeVisible({ timeout: 30_000 });
-  // The server kept the original save untouched.
-  expect(await saveDoc(request, uid, IG_ID)).toMatchObject({ source: "web", savedAt: weekAgo.toISOString() });
+  // The server kept the original save untouched. (Moments are compared as numbers: the emulator
+  // writes a whole second without ".000".)
+  const kept = await saveDoc(request, uid, IG_ID);
+  expect(kept).toMatchObject({ source: "web" });
+  expect(new Date(String(kept?.savedAt)).getTime()).toBe(weekAgo.getTime());
 });
 
 test("sharing a post that's in the Trash brings it back", async ({ page, request }) => {

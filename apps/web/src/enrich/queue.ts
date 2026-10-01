@@ -1,4 +1,4 @@
-import { LIMITS, META_PLATFORMS, parse, type LinkMeta } from "@postsaver/core";
+import { LIMITS, META_PLATFORMS, TEXT_PLATFORM, parse, type LinkMeta } from "@postsaver/core";
 import type { LibrarySave } from "../sync/library.ts";
 
 // The decisions of the enrichment queue (CLAUDE.md §6.3), kept pure so they can be tested: which
@@ -30,6 +30,8 @@ export interface Work {
 }
 
 function workFor(save: LibrarySave): Work["do"] | null {
+  // A saved text has no link: there's nothing to open or look up.
+  if (save.platform === TEXT_PLATFORM) return null;
   if (save.needsResolve) {
     const via = parse(save.url)?.resolveVia;
     return via === "redirect" ? "resolve" : via === "bsky-handle" ? "bsky" : "reparse";

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { LibrarySave } from "../sync/library.ts";
+import { toLibrarySave, type LibrarySave, type LinkSave } from "../sync/library.ts";
 import { applyQuery, parseQuery, platformsInUse, queryToSearch, tagCounts } from "./query.ts";
 
-function save(over: Partial<LibrarySave> & { id: string }): LibrarySave {
+function save(over: Partial<LinkSave> & { id: string }): LinkSave {
   return {
     url: `https://example.com/${over.id}`,
     originalUrl: `https://example.com/${over.id}`,
@@ -63,6 +63,25 @@ describe("applyQuery", () => {
   });
   it("keeps only search matches when there's a search", () => {
     expect(ids(applyQuery(saves, parseQuery("?q=x"), new Set(["a", "t"])))).toEqual(["a"]);
+  });
+});
+
+describe("saved texts in the library", () => {
+  const text = toLibrarySave("text_0123456789abcdef01234567", { text: "Gate code 4821#", platform: "text", tags: ["home"], collectionIds: [], favorite: false, status: "active", source: "paste", schemaVersion: 1 }, false);
+  const all = [...saves, { ...text, savedAt: d(5), updatedAt: d(5) }];
+
+  it("are read as texts: no link, nothing to look up", () => {
+    expect(text).toMatchObject({ platform: "text", text: "Gate code 4821#", url: "", needsResolve: false, needsMeta: false, tags: ["home"] });
+  });
+  it("a document that says it's a text but has none is read as an (empty) link, not as a text", () => {
+    expect(toLibrarySave("x", { platform: "text" }, false).text).toBeUndefined();
+  });
+  it("sit among the saves, with a filter of their own", () => {
+    expect(ids(applyQuery(all, parseQuery("")))).toEqual([text.id, "c", "b", "a"]);
+    expect(ids(applyQuery(all, parseQuery("?platform=text")))).toEqual([text.id]);
+    expect(parseQuery("?platform=text").platform).toBe("text");
+    expect(platformsInUse(all)).toEqual(["instagram", "youtube", "text"]);
+    expect(tagCounts(all)).toContainEqual({ tag: "home", count: 1 });
   });
 });
 

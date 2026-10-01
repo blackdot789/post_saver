@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   LIMITS,
+  PLATFORMS,
+  SAVE_PLATFORMS,
   SCHEMA_VERSION,
+  cleanText,
   moveToTop,
   newSave,
+  newText,
   newUserDoc,
   normalizeTag,
   normalizeTags,
@@ -143,5 +147,57 @@ describe("newUserDoc", () => {
   it("trims and caps the display name", () => {
     const doc = newUserDoc({ email: "a@example.com", displayName: ` ${"n".repeat(150)} `, now: 1 });
     expect(doc.displayName).toBe("n".repeat(LIMITS.displayName));
+  });
+});
+
+describe("cleanText", () => {
+  it.each([
+    ["hello", "hello"],
+    ["  indented first line\n  and the second", "  indented first line\n  and the second"],
+    ["\n \n\nblank lines before", "blank lines before"],
+    ["space after  \n\n \t", "space after"],
+    ["windows\r\nline\rbreaks", "windows\nline\nbreaks"],
+    ["tabs\tstay", "tabs\tstay"],
+    ["nul\u0000 and bell\u0007 go", "nul and bell go"],
+    ["half a pair \uD83D is dropped, 😀 stays", "half a pair  is dropped, 😀 stays"],
+    ["   \n\t ", null],
+    ["", null],
+  ])("%j → %j", (raw, expected) => {
+    expect(cleanText(raw)).toBe(expected);
+  });
+
+  it("cuts at the limit without splitting an emoji, and is stable", () => {
+    expect(cleanText("x".repeat(LIMITS.text + 50))).toBe("x".repeat(LIMITS.text));
+    const cut = cleanText(`${"x".repeat(LIMITS.text - 1)}😀`);
+    expect(cut).toBe("x".repeat(LIMITS.text - 1));
+    const messy = `\n\n  ${"word \r\n".repeat(3000)}`;
+    const once = cleanText(messy);
+    expect(once).not.toBeNull();
+    expect(cleanText(once ?? "")).toBe(once);
+  });
+});
+
+describe("newText", () => {
+  it("builds the full document the rules expect", () => {
+    expect(newText("Gate code 4821#", { source: "paste", now: "server-time", tags: ["Home"], note: " Front gate " })).toEqual({
+      text: "Gate code 4821#",
+      platform: "text",
+      note: "Front gate",
+      tags: ["home"],
+      collectionIds: [],
+      favorite: false,
+      status: "active",
+      deleted: false,
+      source: "paste",
+      savedAt: "server-time",
+      createdAt: "server-time",
+      updatedAt: "server-time",
+      schemaVersion: SCHEMA_VERSION,
+    });
+  });
+
+  it("is filed beside the platforms, never as one of them", () => {
+    expect(SAVE_PLATFORMS).toEqual([...PLATFORMS, "text"]);
+    expect(PLATFORMS).not.toContain("text");
   });
 });

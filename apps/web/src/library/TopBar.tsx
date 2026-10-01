@@ -1,5 +1,5 @@
 import type { RefObject } from "react";
-import type { Platform } from "@postsaver/core";
+import type { SavePlatform } from "@postsaver/core";
 import { PlatformIcon } from "../lib/PlatformBadge.tsx";
 import { PLATFORM_NAMES } from "../lib/platforms.ts";
 import { Button } from "../ui/Button.tsx";
@@ -9,7 +9,7 @@ import type { Layout, LibraryQuery, Sort } from "./query.ts";
 interface TopBarProps {
   query: LibraryQuery;
   onQuery: (patch: Partial<LibraryQuery>) => void;
-  platforms: Platform[];
+  platforms: SavePlatform[];
   layout: Layout;
   onLayout: (layout: Layout) => void;
   selecting: boolean;
@@ -30,7 +30,7 @@ export function TopBar({ query, onQuery, platforms, layout, onLayout, selecting,
           <input
             ref={searchRef}
             type="search"
-            placeholder="Search titles, tags, notes…  ( / )"
+            placeholder="Search titles, text, tags, notes…  ( / )"
             value={query.q}
             onChange={(e) => onQuery({ q: e.target.value })}
             className="block w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-base placeholder:text-slate-400 focus:border-brand-from focus:outline-3 focus:outline-brand-from/25 dark:border-white/15 dark:bg-white/5 dark:placeholder:text-slate-500"

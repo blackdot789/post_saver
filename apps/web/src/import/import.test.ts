@@ -1,6 +1,7 @@
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import type { LibrarySave } from "../sync/library.ts";
+import { textId } from "@postsaver/core";
+import { toLibrarySave, type LibrarySave, type LinkSave } from "../sync/library.ts";
 import { parseBookmarks } from "./bookmarks.ts";
 import { parseCsv, parseCsvFile } from "./csv.ts";
 import { fixEncoding, parseInstagramFiles } from "./instagram.ts";
@@ -11,7 +12,7 @@ import { ImportError, toTime } from "./types.ts";
 const NOW = Date.UTC(2026, 8, 30, 12);
 const file = (name: string, content: string | Uint8Array) => new File([content as BlobPart], name);
 
-function save(over: Partial<LibrarySave> & { id: string }): LibrarySave {
+function save(over: Partial<LinkSave> & { id: string }): LinkSave {
   return {
     url: `https://example.com/${over.id}`,
     originalUrl: `https://example.com/${over.id}`,
@@ -283,6 +284,39 @@ describe("planImport", () => {
     const junk = await planImport({ type: "csv", items: [{ url: "http://localhost/x" }, { url: "https://example.com/ok" }], skipped: 3 }, []);
     expect(junk.invalid).toBe(4);
     expect(junk.add).toHaveLength(1);
+  });
+
+  it("brings back the saved texts of this app's own export, once each", async () => {
+    const parsed = await readImportFile(
+      file(
+        "export.json",
+        JSON.stringify({
+          app: "postsaver",
+          version: 1,
+          saves: [
+            { text: "Gate code 4821#", platform: "text", savedAt: "2026-06-01T00:00:00.000Z", tags: ["Home"], collections: ["Codes"], favorite: true, note: "Front gate", title: "ignored" },
+            { text: "\r\nGate code 4821#  ", platform: "text", tags: ["door"] },
+            { text: "   ", platform: "text" },
+            { text: "In the bin", platform: "text", status: "trashed" },
+            { url: "https://example.com/a" },
+          ],
+        }),
+      ),
+      NOW,
+    );
+    expect(parsed).toMatchObject({ type: "backup", skipped: 2 });
+    const plan = await planImport(parsed, []);
+    expect(plan.add).toEqual([
+      { id: await textId("Gate code 4821#"), url: "", text: "Gate code 4821#", savedAt: Date.UTC(2026, 5, 1), tags: ["home", "door"], note: "Front gate", collections: ["Codes"], favorite: true },
+      expect.objectContaining({ url: "https://example.com/a" }),
+    ]);
+    expect(plan).toMatchObject({ repeated: 1, invalid: 2, already: 0 });
+
+    // Already in the library: nothing to add, but it gains the tag it doesn't have yet.
+    const have = toLibrarySave(plan.add[0]!.id, { text: "Gate code 4821#", platform: "text", tags: ["home"], collectionIds: [], status: "active" }, false);
+    const again = await planImport(parsed, [have]);
+    expect(again.add.map((p) => p.url)).toEqual(["https://example.com/a"]);
+    expect(again.update).toEqual([{ id: have.id, tags: ["door"], collections: ["Codes"] }]);
   });
 
   it("creates at most 30 new collections per import", async () => {

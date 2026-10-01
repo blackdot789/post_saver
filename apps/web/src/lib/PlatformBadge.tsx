@@ -1,4 +1,4 @@
-import type { Platform } from "@postsaver/core";
+import type { Platform, SavePlatform } from "@postsaver/core";
 import { siBluesky, siFacebook, siInstagram, siPinterest, siReddit, siThreads, siTiktok, siX, siYoutube } from "simple-icons";
 import { PLATFORM_NAMES } from "./platforms.ts";
 import { cx } from "../ui/cx.ts";
@@ -23,8 +23,15 @@ const MARKS: Record<Exclude<Platform, "web">, { path: string; color: string }> =
   bluesky: { path: siBluesky.path, color: "text-[#1185FE]" },
 };
 
-/** The platform's mark, or a globe for any other site; 16 px unless a size class is given. */
-export function PlatformIcon({ platform, className }: { platform: Platform; className?: string }) {
+/** The platform's mark, a globe for any other site, lines for a saved text; 16 px unless a size class is given. */
+export function PlatformIcon({ platform, className }: { platform: SavePlatform; className?: string }) {
+  if (platform === "text") {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className={cx("shrink-0 text-slate-500 dark:text-slate-400", className ?? "size-4")}>
+        <path d="M5 7h14M5 12h14M5 17h9" />
+      </svg>
+    );
+  }
   if (platform === "web") {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className={cx("shrink-0 text-slate-500 dark:text-slate-400", className ?? "size-4")}>
@@ -41,7 +48,7 @@ export function PlatformIcon({ platform, className }: { platform: Platform; clas
   );
 }
 
-export function PlatformBadge({ platform, className }: { platform: Platform; className?: string }) {
+export function PlatformBadge({ platform, className }: { platform: SavePlatform; className?: string }) {
   return (
     <span className={cx("inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold", className)}>
       <PlatformIcon platform={platform} />

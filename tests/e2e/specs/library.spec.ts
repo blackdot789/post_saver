@@ -192,7 +192,7 @@ test("settings: the theme applies at once and is remembered; the Add dialog save
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  await page.getByLabel("Link to a post").fill("https://www.pinterest.com/pin/123456789012345678/");
+  await page.getByLabel("Link or text").fill("https://www.pinterest.com/pin/123456789012345678/");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByRole("dialog").getByText("Synced to your library.")).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
@@ -216,5 +216,5 @@ test("keyboard shortcuts: / searches, n adds, f and e act on the focused card", 
 
   await page.locator("body").click({ position: { x: 5, y: 5 } });
   await page.keyboard.press("n");
-  await expect(page.getByRole("dialog", { name: "Save a link" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Add to your library" })).toBeVisible();
 });

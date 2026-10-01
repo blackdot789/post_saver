@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parse, saveId, sha256Hex } from "../src/index.ts";
+import { cleanText, parse, saveId, sha256Hex, textId } from "../src/index.ts";
 
 async function idOf(input: string): Promise<string> {
   const link = parse(input);
@@ -82,5 +82,22 @@ describe("saveId", () => {
   ])("%s: every form gives one id", async (_name, inputs) => {
     const ids = new Set(await Promise.all(inputs.map(idOf)));
     expect(ids.size).toBe(1);
+  });
+});
+
+describe("textId", () => {
+  it("is the start of the text's hash", async () => {
+    expect(await textId("abc")).toBe("text_ba7816bf8f01cfea414140de");
+  });
+
+  it("is the same for the same text however it was pasted, and differs for other text", async () => {
+    const id = await textId(cleanText("Gate code 4821#") ?? "");
+    expect(await textId(cleanText("\r\nGate code 4821#  \n") ?? "")).toBe(id);
+    expect(await textId(cleanText("gate code 4821#") ?? "")).not.toBe(id);
+    expect(id).toMatch(/^text_[0-9a-f]{24}$/);
+  });
+
+  it("hashes text as UTF-8, like the rules do", async () => {
+    expect(await textId("नमस्ते 👋🏽")).toBe(`text_${(await sha256Hex("नमस्ते 👋🏽")).slice(0, 24)}`);
   });
 });

@@ -19,3 +19,11 @@ export async function saveId(link: Pick<ParsedLink, "platform" | "platformId" | 
   if (platform !== "web" && platformId && SAFE_ID.test(platformId)) return `${platform}_${platformId}`;
   return `url_${(await sha256Hex(canonicalUrl)).slice(0, 24)}`;
 }
+
+/**
+ * Deterministic Firestore id for a saved text (as cleanText() returned it), so the same text
+ * saved twice is one document: `text_{first 24 hex of sha256(text)}`. The rules recompute it.
+ */
+export async function textId(text: string): Promise<string> {
+  return `text_${(await sha256Hex(text)).slice(0, 24)}`;
+}

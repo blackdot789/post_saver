@@ -66,6 +66,11 @@ service cloud.firestore {
       return isJoinedList(v, max, '[A-Za-z0-9]{1,40}');
     }
 
+    function isSource(v) {
+      return v is string
+        && v.matches('^(web|share-android|ios-shortcut|bookmarklet|paste|extension|import-[a-z]{1,20}|sync-[a-z]{1,20})$');
+    }
+
     // What a deleted save or collection becomes, so other devices learn about the delete.
     function isTombstone(d) {
       return d.keys().hasOnly(['deleted', 'updatedAt', 'schemaVersion'])
@@ -123,8 +128,7 @@ service cloud.firestore {
         && (d.status == 'active' || (d.status == 'trashed' && d.get('trashedAt', null) is timestamp))
         && optTimestamp(d, 'trashedAt')
         && d.deleted == false
-        && d.source is string
-        && d.source.matches('^(web|share-android|ios-shortcut|bookmarklet|paste|extension|import-[a-z]{1,20}|sync-[a-z]{1,20})$')
+        && isSource(d.source)
         // Imports carry old dates; an hour of slack covers device clocks on offline saves.
         && d.savedAt is timestamp && d.savedAt < request.time + duration.value(1, 'h')
         && d.createdAt is timestamp
@@ -152,6 +156,55 @@ service cloud.firestore {
 
     function isNewSave(id, d) {
       return isSave(d) && d.createdAt == request.time && isSaveIdFor(id, d);
+    }
+
+    // ---------- saved text ----------
+
+    // A piece of text the owner saved on one device, to read and copy on the others. It lives
+    // beside the saved links, so it syncs, is trashed and deleted exactly like them.
+
+    function textFields() {
+      return ['text', 'platform', 'note', 'tags', 'collectionIds', 'favorite', 'status', 'trashedAt', 'deleted',
+              'source', 'savedAt', 'createdAt', 'updatedAt', 'schemaVersion'];
+    }
+
+    function textRequired() {
+      return ['text', 'platform', 'tags', 'collectionIds', 'favorite', 'status', 'deleted', 'source', 'savedAt',
+              'createdAt', 'updatedAt', 'schemaVersion'];
+    }
+
+    // The text itself never changes: its id is its hash.
+    function textEditable() {
+      return ['note', 'tags', 'collectionIds', 'favorite', 'status', 'trashedAt', 'savedAt', 'updatedAt',
+              'schemaVersion'];
+    }
+
+    function isText(d) {
+      return d.keys().hasOnly(textFields()) && d.keys().hasAll(textRequired())
+        && isString(d.text, 1, 10000)
+        && d.platform == 'text'
+        && optString(d, 'note', 5000)
+        && isTagList(d.tags) && isIdList(d.collectionIds, 50)
+        && d.favorite is bool
+        && (d.status == 'active' || (d.status == 'trashed' && d.get('trashedAt', null) is timestamp))
+        && optTimestamp(d, 'trashedAt')
+        && d.deleted == false
+        && isSource(d.source)
+        && d.savedAt is timestamp && d.savedAt < request.time + duration.value(1, 'h')
+        && d.createdAt is timestamp
+        && d.updatedAt == request.time
+        && d.schemaVersion is int && d.schemaVersion >= 1 && d.schemaVersion <= 1000;
+    }
+
+    // The id comes from the text (textId in packages/core), so the same text saved twice is
+    // one document.
+    function isTextIdFor(id, d) {
+      return id.matches('^text_[0-9a-f]{24}$')
+        && ('text_' + hashing.sha256(d.text).toHexString().lower()).matches(id + '[0-9a-f]*');
+    }
+
+    function isNewText(id, d) {
+      return isText(d) && d.createdAt == request.time && isTextIdFor(id, d);
     }
 
     // ---------- collections ----------
@@ -222,13 +275,16 @@ service cloud.firestore {
       match /saves/{saveId} {
         allow read: if isOwner(uid);
         allow create: if isVerifiedOwner(uid) && isSaveIdFormat(saveId)
-          && (isTombstone(request.resource.data) || isNewSave(saveId, request.resource.data));
+          && (isTombstone(request.resource.data) || isNewSave(saveId, request.resource.data)
+              || isNewText(saveId, request.resource.data));
         allow update: if isVerifiedOwner(uid) && (
           isTombstone(request.resource.data)
-          // Saving a deleted post again starts it fresh.
-          || (wasDeleted() && isNewSave(saveId, request.resource.data))
+          // Saving a deleted post (or text) again starts it fresh.
+          || (wasDeleted() && (isNewSave(saveId, request.resource.data) || isNewText(saveId, request.resource.data)))
           || (!wasDeleted() && isSave(request.resource.data)
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(saveEditable())));
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(saveEditable()))
+          || (!wasDeleted() && isText(request.resource.data)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(textEditable())));
         allow delete: if isVerifiedOwner(uid) && canHardDelete(uid);
       }
 

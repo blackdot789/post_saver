@@ -29,7 +29,7 @@ export function TagEditor({ uid, id, tags, fail }: { uid: string; id: string; ta
         Tags
       </label>
       {tags.length > 0 && (
-        <ul className="mb-2 flex flex-wrap gap-1.5" aria-label="Tags on this post">
+        <ul className="mb-2 flex flex-wrap gap-1.5" aria-label="Tags on this save">
           {tags.map((tag) => (
             <li
               key={tag}

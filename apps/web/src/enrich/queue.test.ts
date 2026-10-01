@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { LibrarySave } from "../sync/library.ts";
+import { toLibrarySave, type LibrarySave, type LinkSave } from "../sync/library.ts";
 import { afterFailure, bskyParts, bskyPostUrl, GIVEN_UP, MAX_TRIES, mergeExtras, metaChanges, pickWork, pruneAttempts } from "./queue.ts";
 
-function save(over: Partial<LibrarySave> & { id: string }): LibrarySave {
+function save(over: Partial<LinkSave> & { id: string }): LinkSave {
   return {
     url: `https://example.com/${over.id}`,
     originalUrl: `https://example.com/${over.id}`,
@@ -47,6 +47,13 @@ describe("pickWork", () => {
       ["video", "meta"],
       // Not: Instagram has no metadata, nothing waits, the Trash, a save not yet on the server.
     ]);
+  });
+
+  it("never picks a saved text, whatever its document says", () => {
+    const text = toLibrarySave("text_0123456789abcdef01234567", { text: "see https://vm.tiktok.com/ZMhvqjXXX/", platform: "text", status: "active" }, false);
+    const odd: LibrarySave[] = [text, { ...text, id: "odd", needsMeta: true, needsResolve: true }];
+    expect(pickWork(odd, {}, NOW)).toEqual([]);
+    expect(pruneAttempts({ odd: GIVEN_UP }, odd)).toEqual({});
   });
 
   it("skips saves that are backing off or given up on, and takes at most a batch", () => {

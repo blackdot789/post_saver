@@ -1,12 +1,14 @@
 import type { SaveSource } from "@postsaver/core";
 
-// Links shared while signed out or before the email is verified. The database only accepts
+// Links and texts shared while signed out or before the email is verified. The database only accepts
 // writes from verified accounts, so these wait on this device (in IndexedDB, which a service
 // worker can read too) and are saved as soon as someone signs in (CLAUDE.md §6.1).
 
 export interface PendingSave {
-  /** The link as shared; also the key, so sharing it twice keeps one entry. */
+  /** The link as shared; also the key, so sharing it twice keeps one entry. For a text: `text:` + its id. */
   url: string;
+  /** Set when what waits is a text, not a link. */
+  text?: string;
   source: SaveSource;
   /** When it was shared (ms since epoch). */
   at: number;

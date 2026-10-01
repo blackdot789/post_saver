@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { ParsedLink, SaveSource } from "@postsaver/core";
-import { saveLink, watchSave, type LiveSave, type SaveOutcome } from "./saveLink.ts";
+import type { SaveSource } from "@postsaver/core";
+import type { Item } from "./item.ts";
+import { saveItem, watchSave, type LiveSave, type SaveOutcome } from "./saveLink.ts";
 
 export interface SaveState {
   /** saving: working out what to do · pending: on this device, not yet on the server · synced · failed */
@@ -12,10 +13,11 @@ export interface SaveState {
 }
 
 /**
- * Saves one link and follows it until the server has it. `onStored` runs once the save is in
- * the device cache (from where Firestore sends it, even after the page closes).
+ * Saves one link or text and follows it until the server has it. `onStored` runs once the save
+ * is in the device cache (from where Firestore sends it, even after the page closes). `item`
+ * must keep its identity between renders.
  */
-export function useSave(uid: string, link: ParsedLink, source: SaveSource, onStored?: () => void): [SaveState, () => void] {
+export function useSave(uid: string, item: Item, source: SaveSource, onStored?: () => void): [SaveState, () => void] {
   const [state, setState] = useState<SaveState>({ sync: "saving" });
   const [attempt, setAttempt] = useState(0);
   const stored = useRef(onStored);
@@ -26,7 +28,7 @@ export function useSave(uid: string, link: ParsedLink, source: SaveSource, onSto
   useEffect(() => {
     let live = true;
     setState({ sync: "saving" });
-    saveLink(uid, link, source).then(
+    saveItem(uid, item, source).then(
       (result) => {
         if (!live) return;
         stored.current?.();
@@ -41,7 +43,7 @@ export function useSave(uid: string, link: ParsedLink, source: SaveSource, onSto
     return () => {
       live = false;
     };
-  }, [uid, link, source, attempt]);
+  }, [uid, item, source, attempt]);
 
   return [state, () => setAttempt((n) => n + 1)];
 }

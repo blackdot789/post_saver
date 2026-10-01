@@ -1,4 +1,4 @@
-import { LIMITS, normalizeTags, parse, saveId, type ParsedLink } from "@postsaver/core";
+import { LIMITS, cleanText, normalizeTags, parse, saveId, textId, type ParsedLink } from "@postsaver/core";
 import type { LibrarySave } from "../sync/library.ts";
 import type { ImportItem, ImportType, ParsedFile } from "./types.ts";
 
@@ -6,11 +6,13 @@ import type { ImportItem, ImportType, ParsedFile } from "./types.ts";
 // are new, which are in the library already, and, for a repeated Instagram import, which posts
 // have since been unsaved on Instagram. Pure apart from hashing ids.
 
-/** A link ready to be written. */
+/** A link (or a saved text) ready to be written. */
 export interface Prepared {
   id: string;
-  /** The link as it is in the file. */
+  /** The link as it is in the file; empty for a text. */
   url: string;
+  /** The text to save, when the entry is one. */
+  text?: string;
   savedAt?: number;
   tags: string[];
   note?: string;
@@ -70,20 +72,21 @@ export async function planImport(
   collectionNames: ReadonlyMap<string, string> = new Map(),
 ): Promise<ImportPlan> {
   const existing = new Map(library.map((s) => [s.id, s]));
-  const byId = new Map<string, { link: ParsedLink; item: ImportItem }>();
+  const byId = new Map<string, { link: ParsedLink | null; text: string | null; item: ImportItem }>();
   let invalid = parsed.skipped;
   let repeated = 0;
 
   for (const item of parsed.items) {
-    const link = parse(item.url);
-    if (!link) {
+    const text = item.text !== undefined ? cleanText(item.text) : null;
+    const link = item.text === undefined ? parse(item.url) : null;
+    if (!link && !text) {
       invalid++;
       continue;
     }
-    const id = await saveId(link);
+    const id = link ? await saveId(link) : await textId(text ?? "");
     const before = byId.get(id);
     if (!before) {
-      byId.set(id, { link, item: { ...item } });
+      byId.set(id, { link, text, item: { ...item } });
       continue;
     }
     // The same post again (Instagram lists a post once per collection): combine what's known.
@@ -100,7 +103,7 @@ export async function planImport(
   const add: Prepared[] = [];
   const update: Addition[] = [];
   let already = 0;
-  for (const [id, { link, item }] of byId) {
+  for (const [id, { link, text, item }] of byId) {
     const tags = normalizeTags(item.tags ?? []);
     const collections = unique((item.collections ?? []).map(cleanName), LIMITS.collectionIds);
     const saved = existing.get(id);
@@ -115,10 +118,11 @@ export async function planImport(
       continue;
     }
     const note = item.note?.trim().slice(0, LIMITS.note);
-    const title = link.platform === "web" ? item.title?.trim().slice(0, LIMITS.title) : undefined;
+    const title = link?.platform === "web" ? item.title?.trim().slice(0, LIMITS.title) : undefined;
     add.push({
       id,
       url: item.url,
+      ...(text ? { text } : {}),
       ...(item.savedAt ? { savedAt: item.savedAt } : {}),
       tags,
       ...(note ? { note } : {}),

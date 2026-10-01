@@ -1,7 +1,7 @@
-import type { Kind, Platform } from "@postsaver/core";
+import type { Kind, SavePlatform } from "@postsaver/core";
 
 /** Platform names as the platforms write them, only to say where a post is from. */
-export const PLATFORM_NAMES: Record<Platform, string> = {
+export const PLATFORM_NAMES: Record<SavePlatform, string> = {
   instagram: "Instagram",
   x: "X",
   tiktok: "TikTok",
@@ -13,6 +13,7 @@ export const PLATFORM_NAMES: Record<Platform, string> = {
   pinterest: "Pinterest",
   bluesky: "Bluesky",
   web: "Web",
+  text: "Text",
 };
 
 const KIND_NAMES: Record<Kind, string> = {
@@ -32,16 +33,17 @@ const KIND_NAMES: Record<Kind, string> = {
   link: "page",
 };
 
-/** "Instagram reel", "YouTube Short", "Reddit comment"; any other site is a "Link". */
-export function describeLink({ platform, kind }: { platform: Platform; kind: Kind }): string {
+/** "Instagram reel", "YouTube Short", "Reddit comment"; any other site is a "Link", a saved text a "Text". */
+export function describeLink({ platform, kind }: { platform: SavePlatform; kind: Kind }): string {
   if (platform === "web") return "Link";
+  if (platform === "text") return "Text";
   return `${PLATFORM_NAMES[platform]} ${KIND_NAMES[kind]}`;
 }
 
-const HANDLES = new Set<Platform>(["instagram", "x", "tiktok", "threads", "bluesky"]);
+const HANDLES = new Set<SavePlatform>(["instagram", "x", "tiktok", "threads", "bluesky"]);
 
 /** How the platform writes a username: "@natgeo", "u/spez", or the page name as is. */
-export function authorLabel(platform: Platform, author: string): string {
+export function authorLabel(platform: SavePlatform, author: string): string {
   if (platform === "reddit") return `u/${author}`;
   return HANDLES.has(platform) ? `@${author}` : author;
 }

@@ -3,12 +3,12 @@ import type { Collection } from "../data/collections.ts";
 import { parseBookmarks } from "../import/bookmarks.ts";
 import { parseCsvFile } from "../import/csv.ts";
 import { readImportFile } from "../import/read.ts";
-import type { LibrarySave } from "../sync/library.ts";
+import { toLibrarySave, type LibrarySave, type LinkSave } from "../sync/library.ts";
 import { buildExport, toBookmarksHtml, toCsv, toJson } from "./build.ts";
 
 const NOW = new Date(Date.UTC(2026, 8, 30, 12));
 
-function save(over: Partial<LibrarySave> & { id: string; url: string }): LibrarySave {
+function save(over: Partial<LinkSave> & { id: string; url: string }): LinkSave {
   return {
     originalUrl: over.url,
     platform: "web",
@@ -38,6 +38,57 @@ const saves = [
   save({ id: "c", url: "https://x.com/jack/status/20", platform: "x", kind: "post", author: "jack", status: "trashed", savedAt: new Date(Date.UTC(2024, 0, 1)) }),
 ];
 
+const text: LibrarySave = {
+  ...toLibrarySave("text_0123456789abcdef01234567", { text: 'Gate code 4821#\n=SUM(1), "then" left', platform: "text", tags: ["home"], collectionIds: ["c1"], favorite: true, status: "active", source: "paste", note: "Front gate" }, false),
+  savedAt: new Date(Date.UTC(2026, 5, 1)),
+};
+
+describe("exporting saved texts", () => {
+  const all = [...saves, text];
+
+  it("JSON carries them, and this app imports them again", async () => {
+    const json = toJson(all, collections, NOW);
+    const data = JSON.parse(json) as { saves: Array<Record<string, unknown>> };
+    expect(data.saves[0]).toEqual({
+      text: 'Gate code 4821#\n=SUM(1), "then" left',
+      platform: "text",
+      note: "Front gate",
+      tags: ["home"],
+      collections: ["Recipes"],
+      favorite: true,
+      status: "active",
+      savedAt: "2026-06-01T00:00:00.000Z",
+      source: "paste",
+    });
+    const back = await readImportFile(new File([json], "export.json"), NOW.getTime());
+    expect(back.items[0]).toEqual({
+      url: "",
+      text: 'Gate code 4821#\n=SUM(1), "then" left',
+      savedAt: Date.UTC(2026, 5, 1),
+      tags: ["home"],
+      note: "Front gate",
+      collections: ["Recipes"],
+      favorite: true,
+    });
+  });
+
+  it("CSV has them in a column of their own, defused like any other cell", () => {
+    const csv = toCsv(all, collections);
+    expect(csv.split("\r\n")[0]).toBe("url,title,platform,author,tags,note,collections,favorite,saved at,text");
+    expect(csv).toContain(`,text,,home,Front gate,Recipes,yes,2026-06-01T00:00:00.000Z,"Gate code 4821#\n=SUM(1), ""then"" left"`);
+    // Reading the CSV back brings the links; a text has no link to import.
+    const back = parseCsvFile(csv, NOW.getTime());
+    expect(back.items.map((i) => i.url)).not.toContain("");
+    expect(back.items).toHaveLength(2);
+  });
+
+  it("the bookmarks file leaves them out: a text has no address", () => {
+    const html = toBookmarksHtml(all, collections, "My saves");
+    expect(html).not.toContain("Gate code");
+    expect(html).toBe(toBookmarksHtml(saves, collections, "My saves"));
+  });
+});
+
 describe("export", () => {
   it("JSON holds everything, newest first, and this app imports it again", async () => {
     const json = toJson(saves, collections, NOW);
@@ -64,7 +115,7 @@ describe("export", () => {
 
   it("CSV quotes what needs quoting, defuses formulas, leaves out the Trash, and reads back", () => {
     const csv = toCsv(saves, collections);
-    expect(csv.split("\r\n")[0]).toBe("url,title,platform,author,tags,note,collections,favorite,saved at");
+    expect(csv.split("\r\n")[0]).toBe("url,title,platform,author,tags,note,collections,favorite,saved at,text");
     expect(csv).toContain(`"Pasta, ""quick"""`);
     expect(csv).toContain("'=HYPERLINK(1)");
     expect(csv).not.toContain("x.com/jack");

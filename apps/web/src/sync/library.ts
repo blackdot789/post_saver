@@ -1,5 +1,5 @@
 import { onSnapshot, query, type DocumentData, type QueryDocumentSnapshot } from "firebase/firestore";
-import type { EmbedStatus, Kind, Platform, SaveSource, SaveStatus } from "@postsaver/core";
+import { TEXT_PLATFORM, type EmbedStatus, type Kind, type Platform, type SaveSource, type SaveStatus } from "@postsaver/core";
 import { savesOf } from "../data/firestore.ts";
 
 // The library as this device holds it. This listener reads only the device cache: it never
@@ -7,11 +7,11 @@ import { savesOf } from "../data/firestore.ts";
 // changed on the server) and by this device's own writes. Documents evicted from the cache
 // would never come back, which is why the cache is unlimited (data/firestore.ts).
 
-export interface LibrarySave {
+interface SaveFields {
   id: string;
+  /** The saved link; empty for a saved text. */
   url: string;
   originalUrl: string;
-  platform: Platform;
   kind: Kind;
   platformId: string | null;
   author?: string;
@@ -35,6 +35,20 @@ export interface LibrarySave {
   /** Changed on this device; the server hasn't confirmed it yet. */
   pending: boolean;
 }
+
+/** A saved post or page. */
+export interface LinkSave extends SaveFields {
+  platform: Platform;
+  text?: undefined;
+}
+
+/** A saved piece of text: no link, no preview, nothing to look up. */
+export interface TextSave extends SaveFields {
+  platform: typeof TEXT_PLATFORM;
+  text: string;
+}
+
+export type LibrarySave = LinkSave | TextSave;
 
 export interface TombstoneRow {
   id: string;
@@ -64,11 +78,10 @@ export function toLibrarySave(id: string, data: DocumentData, pending: boolean):
     const value = toDate(data[key]);
     return value ? { [key]: value } : {};
   };
-  return {
+  const fields: SaveFields = {
     id,
     url: str(data.url) ?? "",
     originalUrl: str(data.originalUrl) ?? str(data.url) ?? "",
-    platform: (str(data.platform) as Platform | undefined) ?? "web",
     kind: (str(data.kind) as Kind | undefined) ?? "link",
     platformId: str(data.platformId) ?? null,
     ...opt("author"),
@@ -91,6 +104,9 @@ export function toLibrarySave(id: string, data: DocumentData, pending: boolean):
     schemaVersion: typeof data.schemaVersion === "number" ? data.schemaVersion : 1,
     pending,
   };
+  const text = str(data.text);
+  if (data.platform === TEXT_PLATFORM && text) return { ...fields, platform: TEXT_PLATFORM, text, needsResolve: false, needsMeta: false };
+  return { ...fields, platform: (str(data.platform) as Platform | undefined) ?? "web" };
 }
 
 function toSnapshot(docs: QueryDocumentSnapshot[]): LibrarySnapshot {

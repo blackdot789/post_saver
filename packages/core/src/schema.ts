@@ -1,6 +1,6 @@
 // Firestore document shapes (CLAUDE.md §6.4). firebase/firestore.rules enforces the same
 // fields and limits; the rules tests build documents with these helpers so both stay in step.
-import type { Kind, ParsedLink, Platform } from "./types.ts";
+import { PLATFORMS, type Kind, type ParsedLink, type Platform } from "./types.ts";
 import { MAX_URL_LENGTH } from "./url.ts";
 
 export const SCHEMA_VERSION = 1;
@@ -11,6 +11,7 @@ export const LIMITS = {
   author: 100,
   title: 500,
   note: 5000,
+  text: 10_000,
   tags: 30,
   tagLength: 40,
   collectionIds: 50,
@@ -76,6 +77,38 @@ export interface SaveDoc<T> {
   embedCheckedAt?: T;
   needsResolve: boolean;
   needsMeta: boolean;
+  schemaVersion: number;
+}
+
+/**
+ * What the library files a saved text under, beside the platforms. A text is a save without a
+ * link: something the owner typed or pasted on one device, to read and copy on the others.
+ */
+export const TEXT_PLATFORM = "text";
+
+/** Everything a save can be filed under: the platform of its link, or "text". */
+export const SAVE_PLATFORMS = [...PLATFORMS, TEXT_PLATFORM] as const;
+export type SavePlatform = (typeof SAVE_PLATFORMS)[number];
+
+/**
+ * A saved text: `/users/{uid}/saves/text_{hash}`, in the same collection as the saved links, so
+ * it syncs, is trashed and deleted exactly like them. The text itself never changes (its id is
+ * its hash); everything the owner adds to it can.
+ */
+export interface TextDoc<T> {
+  text: string;
+  platform: typeof TEXT_PLATFORM;
+  note?: string;
+  tags: string[];
+  collectionIds: string[];
+  favorite: boolean;
+  status: SaveStatus;
+  trashedAt?: T;
+  deleted: false;
+  source: SaveSource;
+  savedAt: T;
+  createdAt: T;
+  updatedAt: T;
   schemaVersion: number;
 }
 
@@ -207,6 +240,47 @@ export function newSave<T>(link: ParsedLink, { source, now, savedAt, tags, note 
     embedStatus: "unknown",
     needsResolve: link.needsResolve,
     needsMeta: META_PLATFORMS.has(link.platform),
+    schemaVersion: SCHEMA_VERSION,
+  };
+}
+
+/**
+ * Text as it's stored: line breaks as "\n", no control characters (tabs and line breaks stay),
+ * no lone half of a surrogate pair (a database can't hold one), no blank lines at the start or
+ * blank space at the end, at most LIMITS.text UTF-16 units. Returns null when nothing is left.
+ */
+export function cleanText(raw: string): string | null {
+  const text = raw
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/^(?:[ \t]*\n)+/, "");
+  let out = "";
+  // By code point, so the limit never cuts a character in half.
+  for (const ch of text) {
+    const code = ch.charCodeAt(0);
+    if (ch.length === 1 && code >= 0xd800 && code <= 0xdfff) continue;
+    if (out.length + ch.length > LIMITS.text) break;
+    out += ch;
+  }
+  return out.trimEnd() || null;
+}
+
+/** A new saved text, in the exact shape the rules accept. `text` is what cleanText() returned. */
+export function newText<T>(text: string, { source, now, savedAt, tags, note }: NewSaveOptions<T>): TextDoc<T> {
+  const trimmedNote = note?.trim().slice(0, LIMITS.note);
+  return {
+    text,
+    platform: TEXT_PLATFORM,
+    ...(trimmedNote ? { note: trimmedNote } : {}),
+    tags: normalizeTags(tags ?? []),
+    collectionIds: [],
+    favorite: false,
+    status: "active",
+    deleted: false,
+    source,
+    savedAt: savedAt ?? now,
+    createdAt: now,
+    updatedAt: now,
     schemaVersion: SCHEMA_VERSION,
   };
 }

@@ -52,7 +52,7 @@ const CARD_GAP = 16;
 
 type DialogState =
   | { kind: "none" }
-  | { kind: "add" }
+  | { kind: "add"; initial?: string }
   | { kind: "settings" }
   | { kind: "import" }
   | { kind: "export" }
@@ -113,7 +113,7 @@ export function LibraryPage({ user }: { user: User }) {
 
   useEffect(() => applyTheme(settings.theme), [settings.theme]);
 
-  // Links shared on this device before signing in (kept by /save/ and /share/) are saved now.
+  // Links and texts shared on this device before signing in (kept by /save/ and /share/) are saved now.
   useEffect(() => {
     ensureProfile(user).catch(forget);
     savePending(uid).then(setCaughtUp, forget);
@@ -166,6 +166,10 @@ export function LibraryPage({ user }: { user: User }) {
     collections: (s) => setDialog({ kind: "collections", saves: [s] }),
     copyLink: (s) => {
       navigator.clipboard?.writeText(s.url).then(() => setToast("Link copied"), () => setToast("Couldn't copy the link"));
+    },
+    copyText: (s) => {
+      if (!navigator.clipboard) return setToast("Couldn't copy the text");
+      navigator.clipboard.writeText(s.text).then(() => setToast("Text copied"), () => setToast("Couldn't copy the text"));
     },
     trash: (s) => {
       trashSave(uid, s.id).catch(fail);
@@ -224,6 +228,20 @@ export function LibraryPage({ user }: { user: User }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   });
+
+  // Pasting onto the page itself (not into a box) opens the Add dialog with what was pasted.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (dialog.kind !== "none" || target?.closest("input, textarea, select, [contenteditable], dialog")) return;
+      const pasted = e.clipboardData?.getData("text/plain").trim();
+      if (!pasted) return;
+      e.preventDefault();
+      setDialog({ kind: "add", initial: pasted });
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [dialog.kind]);
 
   async function leave() {
     await clearLocalData();
@@ -317,7 +335,7 @@ export function LibraryPage({ user }: { user: User }) {
           <ImportBanner controls={importing} />
           {caughtUp > 0 && (
             <Alert tone="success" className="mb-4">
-              {caughtUp === 1 ? "The link you shared before signing in is saved." : `The ${caughtUp} links you shared before signing in are saved.`}
+              {caughtUp === 1 ? "What you shared before signing in is saved." : `The ${caughtUp} things you shared before signing in are saved.`}
             </Alert>
           )}
           {!settings.previews && previews === "ask" && counts.all > 0 && <ConsentBanner onChoose={(p) => updateSettings({ previews: p })} />}
@@ -382,7 +400,7 @@ export function LibraryPage({ user }: { user: User }) {
         </div>
       )}
 
-      {dialog.kind === "add" && <AddDialog uid={uid} onClose={() => setDialog({ kind: "none" })} />}
+      {dialog.kind === "add" && <AddDialog uid={uid} initial={dialog.initial} onClose={() => setDialog({ kind: "none" })} />}
       {dialog.kind === "settings" && (
         <SettingsDialog
           user={user}
@@ -441,14 +459,14 @@ function Empty({ query, total, onAdd }: { query: { view: string; q: string; tag?
       <div className="rounded-3xl border border-dashed border-slate-300 px-6 py-12 text-center dark:border-white/15">
         <p className="text-lg font-semibold">Nothing saved yet</p>
         <p className="mx-auto mt-1.5 max-w-sm text-slate-600 dark:text-slate-300">
-Share a post from any app to this one, or paste its link here, and it shows up on all your devices. Setting up takes a minute.
+Share a post from any app to this one, or paste its link here, and it shows up on all your devices. Text works too: paste it on one device, copy it on another. Setting up takes a minute.
         </p>
         <div className="mt-5 flex flex-wrap justify-center gap-3">
           <ButtonLink href="/setup/" size="sm">
             Set up saving
           </ButtonLink>
           <Button variant="secondary" size="sm" onClick={onAdd}>
-            Paste a link
+            Paste a link or text
           </Button>
         </div>
       </div>

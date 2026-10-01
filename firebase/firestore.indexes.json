@@ -6,6 +6,7 @@
     { "collectionGroup": "saves", "fieldPath": "thumb", "indexes": [] },
     { "collectionGroup": "saves", "fieldPath": "originalUrl", "indexes": [] },
     { "collectionGroup": "saves", "fieldPath": "onPlatform", "indexes": [] },
+    { "collectionGroup": "saves", "fieldPath": "text", "indexes": [] },
     { "collectionGroup": "items", "fieldPath": "text", "indexes": [] },
     {
       "collectionGroup": "saves",

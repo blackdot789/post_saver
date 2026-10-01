@@ -1,3 +1,4 @@
+import { TEXT_PLATFORM } from "@postsaver/core";
 import type { Collection } from "../data/collections.ts";
 import { BACKUP_APP } from "../import/backup.ts";
 import { describeLink, displayHost } from "../lib/platforms.ts";
@@ -5,9 +6,9 @@ import type { LibrarySave } from "../sync/library.ts";
 
 // Export (CLAUDE.md §6.8): the library as files people can keep or take elsewhere. Built on the
 // device from the library's own copy; nothing is sent anywhere.
-// - JSON: everything, in a form this app imports again (import/backup.ts).
-// - CSV: for spreadsheets; this app's CSV import reads it back too.
-// - Bookmarks HTML: for any browser or bookmarking service.
+// - JSON: everything, saved texts included, in a form this app imports again (import/backup.ts).
+// - CSV: for spreadsheets; this app's CSV import reads the links back too.
+// - Bookmarks HTML: for any browser or bookmarking service (links only: a text has no address).
 
 export const EXPORT_VERSION = 1;
 
@@ -25,10 +26,7 @@ export function toJson(saves: readonly LibrarySave[], collections: readonly Coll
       version: EXPORT_VERSION,
       exportedAt: now.toISOString(),
       saves: ordered(saves).map((s) => ({
-        url: s.url,
-        originalUrl: s.originalUrl,
-        platform: s.platform,
-        kind: s.kind,
+        ...(s.platform === TEXT_PLATFORM ? { text: s.text, platform: s.platform } : { url: s.url, originalUrl: s.originalUrl, platform: s.platform, kind: s.kind }),
         ...(s.author ? { author: s.author } : {}),
         ...(s.title ? { title: s.title } : {}),
         ...(s.note ? { note: s.note } : {}),
@@ -52,7 +50,7 @@ function cell(value: string, text = true): string {
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
-const CSV_HEADINGS = ["url", "title", "platform", "author", "tags", "note", "collections", "favorite", "saved at"];
+const CSV_HEADINGS = ["url", "title", "platform", "author", "tags", "note", "collections", "favorite", "saved at", "text"];
 
 /** The saves that aren't in the Trash, one per row. */
 export function toCsv(saves: readonly LibrarySave[], collections: readonly Collection[]): string {
@@ -70,6 +68,7 @@ export function toCsv(saves: readonly LibrarySave[], collections: readonly Colle
         cell(collectionNames(s, names).join(" | ")),
         s.favorite ? "yes" : "",
         s.savedAt ? s.savedAt.toISOString() : "",
+        cell(s.text ?? ""),
       ].join(","),
     );
   return `${[CSV_HEADINGS.join(","), ...rows].join("\r\n")}\r\n`;
@@ -89,7 +88,7 @@ function bookmark(save: LibrarySave): string {
  * (a save in two collections appears in both) and the rest directly in it.
  */
 export function toBookmarksHtml(saves: readonly LibrarySave[], collections: readonly Collection[], folder: string): string {
-  const active = ordered(saves).filter((s) => s.status === "active");
+  const active = ordered(saves).filter((s) => s.status === "active" && s.platform !== TEXT_PLATFORM);
   const names = namesOf(collections);
   const lines: string[] = [
     "<!DOCTYPE NETSCAPE-Bookmark-file-1>",

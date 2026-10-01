@@ -4,7 +4,7 @@ import { PLATFORM_NAMES } from "../lib/platforms.ts";
 import type { LibrarySave } from "../sync/library.ts";
 
 // Search happens in memory, over the device's copy of the library (CLAUDE.md §6.5): title,
-// author, tags, note, platform and the link. Prefix and fuzzy matching, so "recipe" finds
+// author, tags, note, platform, the link, and the words of a saved text. Prefix and fuzzy matching, so "recipe" finds
 // "recipes" and "instagram" finds Instagram posts.
 
 interface Doc {
@@ -15,6 +15,7 @@ interface Doc {
   note: string;
   platform: string;
   url: string;
+  text: string;
 }
 
 function toDoc(s: LibrarySave): Doc {
@@ -26,6 +27,7 @@ function toDoc(s: LibrarySave): Doc {
     note: s.note ?? "",
     platform: PLATFORM_NAMES[s.platform],
     url: s.url.replace(/^https?:\/\/(www\.)?/, "").replace(/[/?&=._-]+/g, " "),
+    text: s.text ?? "",
   };
 }
 
@@ -33,7 +35,7 @@ function toDoc(s: LibrarySave): Doc {
 export function useSearch(saves: readonly LibrarySave[]): (q: string) => Set<string> | undefined {
   const index = useMemo(() => {
     const mini = new MiniSearch<Doc>({
-      fields: ["title", "author", "tags", "note", "platform", "url"],
+      fields: ["title", "author", "tags", "note", "platform", "url", "text"],
       storeFields: [],
       searchOptions: { prefix: true, fuzzy: 0.2, boost: { title: 2, tags: 2, author: 1.5 } },
     });

@@ -9,12 +9,15 @@ import {
   KINDS,
   LIMITS,
   PLATFORMS,
+  cleanText,
   moveToTop,
   newSave,
+  newText,
   newUserDoc,
   parse,
   restoreFromTrash,
   saveId,
+  textId,
   tombstone,
   type NewSaveOptions,
 } from "@postsaver/core";
@@ -95,6 +98,23 @@ async function existingSave(url = IG) {
   const s = await saveFor(url, { now: past(3) });
   await seed(s.path, s.data);
   return s;
+}
+
+/** A saved text, built the way the app builds it. */
+async function textFor(raw: string, opts: Partial<NewSaveOptions<Stamp>> = {}) {
+  const text = cleanText(raw);
+  if (!text) throw new Error("cleanText returned null");
+  const data: DocumentData = newText<Stamp>(text, { source: "paste", now: serverTimestamp(), ...opts });
+  const id = await textId(text);
+  return { id, path: `users/alice/saves/${id}`, data };
+}
+
+const NOTE = "Gate code 4821#, then the second door on the left";
+
+async function existingText(raw = NOTE) {
+  const t = await textFor(raw, { now: past(3) });
+  await seed(t.path, t.data);
+  return t;
 }
 
 function userDoc(extra: DocumentData = {}): DocumentData {
@@ -413,6 +433,150 @@ describe("saves: delete", () => {
     const s = await existingSave();
     await seed(s.path, tombstone(past(61)));
     await assertFails(deleteDoc(doc(db("mallory"), s.path)));
+  });
+});
+
+describe("saved text", () => {
+  it.each([
+    ["a line of text", NOTE],
+    ["several lines with a link in them", "Shopping:\n- milk\n- eggs\nhttps://example.com/list?a=1,2"],
+    ["emoji and other scripts", "नमस्ते 👋🏽 こんにちは"],
+    ["one character", "x"],
+    ["text at the limit", "x".repeat(LIMITS.text)],
+    ["text at the limit in Hindi", "न".repeat(LIMITS.text)],
+    ["emoji up to the limit", "😀".repeat(LIMITS.text)],
+  ])("the verified owner can save %s", async (_label, raw) => {
+    const t = await textFor(raw);
+    await assertSucceeds(setDoc(doc(db("alice"), t.path), t.data));
+  });
+
+  it("with tags, a note and an import date", async () => {
+    const t = await textFor(NOTE, { source: "import-backup", savedAt: past(40), tags: ["Home"], note: "Front gate" });
+    await assertSucceeds(setDoc(doc(db("alice"), t.path), t.data));
+  });
+
+  it("an unverified email, a stranger or a signed-out visitor can't save one", async () => {
+    const t = await textFor(NOTE);
+    await assertFails(setDoc(doc(db("unverified"), t.path), t.data));
+    await assertFails(setDoc(doc(db("mallory"), t.path), t.data));
+    await assertFails(setDoc(doc(db("anon"), t.path), t.data));
+  });
+
+  describe("the id must come from the text", () => {
+    it("rejects another text's id", async () => {
+      const t = await textFor(NOTE);
+      await assertFails(setDoc(doc(db("alice"), `users/alice/saves/${(await textFor("something else")).id}`), t.data));
+    });
+    it("rejects other text under the original id", async () => {
+      const t = await textFor(NOTE);
+      await assertFails(setDoc(doc(db("alice"), t.path), { ...t.data, text: "something else" }));
+    });
+    it("rejects a link's id", async () => {
+      const t = await textFor(NOTE);
+      await assertFails(setDoc(doc(db("alice"), "users/alice/saves/url_0123456789abcdef01234567"), t.data));
+      await assertFails(setDoc(doc(db("alice"), "users/alice/saves/instagram_C8xYz12AbCd"), t.data));
+    });
+    it("a link can't be saved under a text's id", async () => {
+      const t = await textFor(NOTE);
+      const s = await saveFor(IG);
+      await assertFails(setDoc(doc(db("alice"), t.path), s.data));
+      await assertFails(setDoc(doc(db("alice"), t.path), { ...s.data, platform: "text", platformId: t.id.slice(5) }));
+    });
+  });
+
+  it.each([
+    ["an unknown field", { isPublic: true }],
+    ["a link's fields", { url: "https://example.com/", originalUrl: "https://example.com/" }],
+    ["a title", { title: "Hello" }],
+    ["another platform", { platform: "web" }],
+    ["a note over the limit", { note: "x".repeat(LIMITS.note + 1) }],
+    ["a capitalised tag", { tags: ["Home"] }],
+    ["an unknown source", { source: "robot" }],
+    ["a trashed text without a trash time", { status: "trashed" }],
+    ["deleted: true on a live text", { deleted: true }],
+    ["a client clock for updatedAt", { updatedAt: Timestamp.now() }],
+    ["a client clock for createdAt", { createdAt: Timestamp.now() }],
+    ["a save date two hours ahead", { savedAt: Timestamp.fromMillis(Date.now() + 2 * 3600 * 1000) }],
+  ])("rejects %s", async (_label, extra) => {
+    const t = await textFor(NOTE);
+    await assertFails(setDoc(doc(db("alice"), t.path), { ...t.data, ...extra }));
+  });
+
+  it.each([
+    ["empty text", ""],
+    ["text over the limit", "x".repeat(LIMITS.text + 1)],
+  ])("rejects %s, even under its own hash", async (_label, text) => {
+    const data = { ...(await textFor(NOTE)).data, text };
+    await assertFails(setDoc(doc(db("alice"), `users/alice/saves/${await textId(text)}`), data));
+  });
+
+  it("rejects text that isn't a string", async () => {
+    const t = await textFor(NOTE);
+    await assertFails(setDoc(doc(db("alice"), t.path), { ...t.data, text: 42 }));
+  });
+
+  it("rejects a missing required field", async () => {
+    const t = await textFor(NOTE);
+    const { favorite: _dropped, ...data } = t.data;
+    await assertFails(setDoc(doc(db("alice"), t.path), data));
+  });
+
+  it.each([
+    ["tags", { tags: ["home", "codes"] }],
+    ["a note", { note: "Front gate" }],
+    ["favorite", { favorite: true }],
+    ["collections", { collectionIds: ["c1"] }],
+    ["trash", { status: "trashed", trashedAt: serverTimestamp() }],
+    ["move to top", moveToTop(serverTimestamp())],
+  ])("the owner can change %s", async (_label, change) => {
+    const t = await existingText();
+    await assertSucceeds(updateDoc(doc(db("alice"), t.path), { ...change, updatedAt: serverTimestamp() }));
+  });
+
+  it("restoring from trash", async () => {
+    const t = await existingText();
+    await seed(t.path, { ...t.data, status: "trashed", trashedAt: past(1), updatedAt: past(1) });
+    await assertSucceeds(updateDoc(doc(db("alice"), t.path), restoreFromTrash(serverTimestamp(), deleteField())));
+  });
+
+  it.each([
+    ["the text", { text: "something else", updatedAt: serverTimestamp() }],
+    ["the platform", { platform: "web", updatedAt: serverTimestamp() }],
+    ["the source", { source: "web", updatedAt: serverTimestamp() }],
+    ["createdAt", { createdAt: serverTimestamp(), updatedAt: serverTimestamp() }],
+    ["a link's fields onto it", { title: "Hello", needsMeta: false, updatedAt: serverTimestamp() }],
+    ["anything without bumping updatedAt", { favorite: true }],
+  ])("rejects changing %s", async (_label, change) => {
+    const t = await existingText();
+    await assertFails(updateDoc(doc(db("alice"), t.path), change));
+  });
+
+  it("a saved link can't gain text", async () => {
+    const s = await existingSave();
+    await assertFails(updateDoc(doc(db("alice"), s.path), { text: "hello", updatedAt: serverTimestamp() }));
+  });
+
+  it("others can't read or edit it", async () => {
+    const t = await existingText();
+    await assertFails(getDoc(doc(db("mallory"), t.path)));
+    await assertFails(updateDoc(doc(db("mallory"), t.path), { favorite: true, updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db("unverified"), t.path), { favorite: true, updatedAt: serverTimestamp() }));
+  });
+
+  it("saving the same text again from another device is refused, not duplicated", async () => {
+    const t = await existingText();
+    const again = await textFor(`\n${NOTE}  \r\n`);
+    expect(again.path).toBe(t.path);
+    await assertFails(setDoc(doc(db("alice"), again.path), again.data));
+  });
+
+  it("is deleted like a save: a tombstone, a fresh start, and a hard delete after 60 days", async () => {
+    const t = await existingText();
+    await assertFails(deleteDoc(doc(db("alice"), t.path)));
+    await assertSucceeds(setDoc(doc(db("alice"), t.path), tombstone(serverTimestamp())));
+    await assertSucceeds(setDoc(doc(db("alice"), t.path), (await textFor(NOTE)).data));
+    await seed(t.path, tombstone(past(61)));
+    await assertSucceeds(deleteDoc(doc(db("alice"), t.path)));
   });
 });
 

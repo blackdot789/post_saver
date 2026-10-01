@@ -13,7 +13,10 @@ export const IMPORT_NAMES: Record<ImportType, string> = {
 
 /** One link found in a file, with whatever the file says about it. */
 export interface ImportItem {
+  /** The link; empty when the entry is a saved text. */
   url: string;
+  /** A saved text (only this app's own export has them). */
+  text?: string;
   /** When it was saved, in ms since 1970, if the file says. */
   savedAt?: number;
   title?: string;
