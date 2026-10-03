@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import type { SavePlatform } from "@postsaver/core";
+import type { Category } from "../data/categories.ts";
 import { PlatformIcon } from "../lib/PlatformBadge.tsx";
 import { PLATFORM_NAMES } from "../lib/platforms.ts";
 import { Button } from "../ui/Button.tsx";
@@ -10,6 +11,10 @@ interface TopBarProps {
   query: LibraryQuery;
   onQuery: (patch: Partial<LibraryQuery>) => void;
   platforms: SavePlatform[];
+  /** The categories that have a tab. */
+  categories: Category[];
+  onNewCategory: () => void;
+  onEditCategory: (category: Category) => void;
   layout: Layout;
   onLayout: (layout: Layout) => void;
   selecting: boolean;
@@ -20,8 +25,12 @@ interface TopBarProps {
 
 const SORT_LABELS: Record<Sort, string> = { newest: "Newest saved", oldest: "Oldest saved", updated: "Recently updated" };
 
-/** Search, platform chips, sort and layout. */
-export function TopBar({ query, onQuery, platforms, layout, onLayout, selecting, onSelecting, searchRef, shown }: TopBarProps) {
+const TAB = "inline-flex max-w-full items-center gap-1.5 rounded-full px-3 py-1 text-sm";
+const tab = (on: boolean) => cx(TAB, on ? "bg-brand-to text-white" : "bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15");
+
+/** Search, the tabs (platforms and categories), sort and layout. */
+export function TopBar({ query, onQuery, platforms, categories, onNewCategory, onEditCategory, layout, onLayout, selecting, onSelecting, searchRef, shown }: TopBarProps) {
+  const current = categories.find((c) => c.id === query.category);
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -67,40 +76,53 @@ export function TopBar({ query, onQuery, platforms, layout, onLayout, selecting,
           {selecting ? "Done" : "Select"}
         </Button>
       </div>
-      {platforms.length > 1 && (
-        <ul className="flex flex-wrap gap-1.5" aria-label="Platforms">
+      {platforms.length + categories.length > 0 && (
+        <ul className="flex flex-wrap gap-1.5" aria-label="Platforms and categories">
           <li>
-            <button
-              type="button"
-              aria-pressed={!query.platform}
-              onClick={() => onQuery({ platform: undefined })}
-              className={cx("rounded-full px-3 py-1 text-sm", !query.platform ? "bg-brand-to text-white" : "bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15")}
-            >
+            <button type="button" aria-pressed={!query.platform && !query.category} onClick={() => onQuery({ platform: undefined, category: undefined })} className={tab(!query.platform && !query.category)}>
               All
             </button>
           </li>
           {platforms.map((p) => (
             <li key={p}>
-              <button
-                type="button"
-                aria-pressed={query.platform === p}
-                onClick={() => onQuery({ platform: query.platform === p ? undefined : p })}
-                className={cx(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm",
-                  query.platform === p ? "bg-brand-to text-white" : "bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15",
-                )}
-              >
+              <button type="button" aria-pressed={query.platform === p} onClick={() => onQuery({ platform: query.platform === p ? undefined : p })} className={tab(query.platform === p)}>
                 <PlatformIcon platform={p} className={cx("size-3.5", query.platform === p && "text-white!")} />
                 {PLATFORM_NAMES[p]}
               </button>
             </li>
           ))}
+          {categories.map((c) => (
+            <li key={c.id} className="max-w-full">
+              <button type="button" aria-pressed={query.category === c.id} onClick={() => onQuery({ category: query.category === c.id ? undefined : c.id })} className={tab(query.category === c.id)}>
+                <span aria-hidden="true">{c.symbol}</span>
+                <span className="truncate">{c.name}</span>
+              </button>
+            </li>
+          ))}
+          <li>
+            <button
+              type="button"
+              aria-label="New category"
+              title="New category"
+              onClick={onNewCategory}
+              className={cx(TAB, "border border-dashed border-slate-300 text-slate-600 hover:bg-slate-100 dark:border-white/20 dark:text-slate-300 dark:hover:bg-white/10")}
+            >
+              <span aria-hidden="true">+</span> New
+            </button>
+          </li>
         </ul>
       )}
-      <p className="text-xs text-slate-500 dark:text-slate-400" role="status">
-        {shown === 1 ? "1 save" : `${shown} saves`}
-        {query.q && ` matching “${query.q}”`}
-      </p>
+      <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+        <p role="status">
+          {shown === 1 ? "1 save" : `${shown} saves`}
+          {query.q && ` matching “${query.q}”`}
+        </p>
+        {current?.own && (
+          <button type="button" onClick={() => onEditCategory(current)} className="font-medium text-blue-600 underline-offset-4 hover:underline dark:text-sky-400">
+            Edit category
+          </button>
+        )}
+      </div>
     </div>
   );
 }

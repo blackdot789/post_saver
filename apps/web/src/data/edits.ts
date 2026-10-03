@@ -26,6 +26,11 @@ export function setNote(uid: string, id: string, note: string): Promise<void> {
   return updateDoc(saveRef(uid, id), { note: text || deleteField(), updatedAt: serverTimestamp() });
 }
 
+/** Files a save under a category (its id), or under none. */
+export function setCategory(uid: string, id: string, category: string | null): Promise<void> {
+  return updateDoc(saveRef(uid, id), { category: category ?? deleteField(), updatedAt: serverTimestamp() });
+}
+
 export function setFavorite(uid: string, id: string, favorite: boolean): Promise<void> {
   return updateDoc(saveRef(uid, id), { favorite, updatedAt: serverTimestamp() });
 }

@@ -2,8 +2,9 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { User } from "firebase/auth";
 import { LIMITS, normalizeTags, type UserSettings } from "@postsaver/core";
 import { itemKey, type Item } from "../capture/item.ts";
+import type { Category, CategoryIndex } from "../data/categories.ts";
 import { addToCollection, cleanName, createCollection, deleteCollection, removeFromCollection, renameCollection, type Collection } from "../data/collections.ts";
-import { addTags } from "../data/edits.ts";
+import { addTags, setCategory } from "../data/edits.ts";
 import type { Previews, Theme } from "../data/settings.ts";
 import { NoteEditor, TagEditor } from "../pages/save/QuickActions.tsx";
 import { PasteForm } from "../pages/save/PasteForm.tsx";
@@ -14,6 +15,7 @@ import { Alert } from "../ui/Alert.tsx";
 import { Button, ButtonLink } from "../ui/Button.tsx";
 import { Dialog } from "../ui/Dialog.tsx";
 import { TextField } from "../ui/TextField.tsx";
+import { CategoryForm, CategoryPicker } from "./CategoryPicker.tsx";
 
 const forget = () => undefined;
 
@@ -61,6 +63,47 @@ export function BulkTagsDialog({ uid, ids, onClose }: { uid: string; ids: string
       <form onSubmit={submit}>
         <TextField label="Tags, separated by commas" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="recipes, weekend" autoFocus />
       </form>
+    </Dialog>
+  );
+}
+
+/** What kind of thing a save is; for several saves, the category they all get. */
+export function CategoryDialog({ uid, saves, categories, onClose }: { uid: string; saves: LibrarySave[]; categories: CategoryIndex; onClose: () => void }) {
+  // What was just chosen, shown at once; the library's copy catches up a moment later.
+  const [chosen, setChosen] = useState<string | null | undefined>(undefined);
+  const first = saves[0]?.category;
+  const shared = saves.every((s) => s.category === first) ? first : undefined;
+  const single = saves.length === 1;
+
+  function choose(id: string | null) {
+    setChosen(id);
+    for (const s of saves) if ((s.category ?? null) !== id) setCategory(uid, s.id, id).catch(forget);
+    // With several saves there's nothing more to see: back to the library.
+    if (!single) onClose();
+  }
+
+  return (
+    <Dialog open onClose={onClose} title={single ? "Category" : `Set a category for ${saves.length} saves`}>
+      <CategoryPicker uid={uid} categories={categories} value={chosen === undefined ? shared : (chosen ?? undefined)} onChoose={choose} manage />
+    </Dialog>
+  );
+}
+
+/** A new category, or one of the owner's to rename, give another symbol, or delete. */
+export function CategoryEditDialog({ uid, category, categories, onClose, onGone }: { uid: string; category?: Category; categories: CategoryIndex; onClose: () => void; onGone: () => void }) {
+  return (
+    <Dialog open onClose={onClose} title={category ? "Edit category" : "New category"}>
+      <CategoryForm
+        uid={uid}
+        categories={categories}
+        editing={category}
+        onDone={onClose}
+        onCancel={onClose}
+        onDeleted={() => {
+          onGone();
+          onClose();
+        }}
+      />
     </Dialog>
   );
 }

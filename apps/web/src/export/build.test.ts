@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { BUILT_IN_INDEX, indexCategories, type Category } from "../data/categories.ts";
 import type { Collection } from "../data/collections.ts";
 import { parseBookmarks } from "../import/bookmarks.ts";
 import { parseCsvFile } from "../import/csv.ts";
+import { planImport } from "../import/plan.ts";
 import { readImportFile } from "../import/read.ts";
 import { toLibrarySave, type LibrarySave, type LinkSave } from "../sync/library.ts";
 import { buildExport, toBookmarksHtml, toCsv, toJson } from "./build.ts";
@@ -47,7 +49,7 @@ describe("exporting saved texts", () => {
   const all = [...saves, text];
 
   it("JSON carries them, and this app imports them again", async () => {
-    const json = toJson(all, collections, NOW);
+    const json = toJson(all, collections, BUILT_IN_INDEX, NOW);
     const data = JSON.parse(json) as { saves: Array<Record<string, unknown>> };
     expect(data.saves[0]).toEqual({
       text: 'Gate code 4821#\n=SUM(1), "then" left',
@@ -73,8 +75,8 @@ describe("exporting saved texts", () => {
   });
 
   it("CSV has them in a column of their own, defused like any other cell", () => {
-    const csv = toCsv(all, collections);
-    expect(csv.split("\r\n")[0]).toBe("url,title,platform,author,tags,note,collections,favorite,saved at,text");
+    const csv = toCsv(all, collections, BUILT_IN_INDEX);
+    expect(csv.split("\r\n")[0]).toBe("url,title,platform,author,tags,note,collections,favorite,saved at,text,category");
     expect(csv).toContain(`,text,,home,Front gate,Recipes,yes,2026-06-01T00:00:00.000Z,"Gate code 4821#\n=SUM(1), ""then"" left"`);
     // Reading the CSV back brings the links; a text has no link to import.
     const back = parseCsvFile(csv, NOW.getTime());
@@ -91,7 +93,7 @@ describe("exporting saved texts", () => {
 
 describe("export", () => {
   it("JSON holds everything, newest first, and this app imports it again", async () => {
-    const json = toJson(saves, collections, NOW);
+    const json = toJson(saves, collections, BUILT_IN_INDEX, NOW);
     const data = JSON.parse(json) as { app: string; saves: Array<Record<string, unknown>>; collections: unknown[] };
     expect(data).toMatchObject({ app: "postsaver", version: 1, exportedAt: "2026-09-30T12:00:00.000Z" });
     expect(data.saves.map((s) => s.url)).toEqual([saves[1]!.url, saves[0]!.url, saves[2]!.url]);
@@ -114,8 +116,8 @@ describe("export", () => {
   });
 
   it("CSV quotes what needs quoting, defuses formulas, leaves out the Trash, and reads back", () => {
-    const csv = toCsv(saves, collections);
-    expect(csv.split("\r\n")[0]).toBe("url,title,platform,author,tags,note,collections,favorite,saved at,text");
+    const csv = toCsv(saves, collections, BUILT_IN_INDEX);
+    expect(csv.split("\r\n")[0]).toBe("url,title,platform,author,tags,note,collections,favorite,saved at,text,category");
     expect(csv).toContain(`"Pasta, ""quick"""`);
     expect(csv).toContain("'=HYPERLINK(1)");
     expect(csv).not.toContain("x.com/jack");
@@ -147,10 +149,46 @@ describe("export", () => {
   });
 
   it("names the file after the day and gives the CSV a byte-order mark", () => {
-    const file = buildExport("csv", saves, collections, "My saves", NOW);
+    const file = buildExport("csv", saves, collections, BUILT_IN_INDEX, "My saves", NOW);
     expect(file.name).toBe("postsaver-export-2026-09-30.csv");
     expect(file.content.startsWith("﻿url,")).toBe(true);
-    expect(buildExport("json", saves, collections, "My saves", NOW).name).toBe("postsaver-export-2026-09-30.json");
-    expect(buildExport("html", saves, collections, "My saves", NOW).mime).toBe("text/html;charset=utf-8");
+    expect(buildExport("json", saves, collections, BUILT_IN_INDEX, "My saves", NOW).name).toBe("postsaver-export-2026-09-30.json");
+    expect(buildExport("html", saves, collections, BUILT_IN_INDEX, "My saves", NOW).mime).toBe("text/html;charset=utf-8");
+  });
+});
+
+describe("exporting categories", () => {
+  const recipes: Category = { id: "Qx7Lm2Vt9KpRw4Zs8NbY", name: "Recipes", symbol: "🍳", own: true };
+  const categories = indexCategories([recipes]);
+  const command: LibrarySave = {
+    ...toLibrarySave("text_aaaaaaaaaaaaaaaaaaaaaaaa", { text: "git stash -u", platform: "text", category: "command", status: "active", source: "paste" }, false),
+    savedAt: new Date(Date.UTC(2026, 5, 1)),
+  };
+  const all = [
+    command,
+    save({ id: "r", url: "https://example.com/carbonara", category: recipes.id, savedAt: new Date(Date.UTC(2026, 1, 1)) }),
+    save({ id: "gone", url: "https://example.com/orphan", category: "Deleted0000000000000", savedAt: new Date(Date.UTC(2026, 0, 1)) }),
+  ];
+
+  it("JSON names a save's category with its symbol, and leaves out one that no longer exists", () => {
+    const data = JSON.parse(toJson(all, [], categories, NOW)) as { saves: Array<Record<string, unknown>> };
+    expect(data.saves.map((s) => s.category)).toEqual([{ name: "Command", symbol: "⌨️" }, { name: "Recipes", symbol: "🍳" }, undefined]);
+  });
+
+  it("CSV has the category's name in the last column", () => {
+    const rows = toCsv(all, [], categories).trim().split("\r\n");
+    expect(rows[1]!.endsWith(",git stash -u,Command")).toBe(true);
+    expect(rows[2]!.endsWith(",Recipes")).toBe(true);
+    expect(rows[3]!.endsWith(",,")).toBe(true);
+  });
+
+  it("another account imports them: ready-made ones are found, the owner's are made again", async () => {
+    const back = await readImportFile(new File([toJson(all, [], categories, NOW)], "export.json"), NOW.getTime());
+    expect(back.items.map((i) => i.category)).toEqual([{ name: "Command", symbol: "⌨️" }, { name: "Recipes", symbol: "🍳" }, undefined]);
+    const plan = await planImport(back, [], new Map(), BUILT_IN_INDEX);
+    expect(plan.add.map((p) => p.category?.name)).toEqual(["Command", "Recipes", undefined]);
+    expect(plan.categories).toEqual([{ name: "Recipes", symbol: "🍳" }]);
+    // An account that has it already makes nothing.
+    expect((await planImport(back, [], new Map(), categories)).categories).toEqual([]);
   });
 });

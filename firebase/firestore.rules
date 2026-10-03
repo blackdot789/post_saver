@@ -71,7 +71,12 @@ service cloud.firestore {
         && v.matches('^(web|share-android|ios-shortcut|bookmarklet|paste|extension|import-[a-z]{1,20}|sync-[a-z]{1,20})$');
     }
 
-    // What a deleted save or collection becomes, so other devices learn about the delete.
+    // A save's category: a built-in id, or the id of one of the owner's categories/{cid}.
+    function optCategory(d) {
+      return d.get('category', 'none') is string && d.get('category', 'none').matches('^[A-Za-z0-9]{1,40}$');
+    }
+
+    // What a deleted save, collection or category becomes, so other devices learn about the delete.
     function isTombstone(d) {
       return d.keys().hasOnly(['deleted', 'updatedAt', 'schemaVersion'])
         && d.keys().hasAll(['deleted', 'updatedAt'])
@@ -96,9 +101,9 @@ service cloud.firestore {
 
     function saveFields() {
       return ['url', 'originalUrl', 'platform', 'kind', 'platformId', 'author', 'title', 'thumb', 'note',
-              'tags', 'collectionIds', 'favorite', 'status', 'trashedAt', 'deleted', 'source', 'savedAt',
-              'createdAt', 'updatedAt', 'embedStatus', 'embedCheckedAt', 'needsResolve', 'needsMeta',
-              'schemaVersion'];
+              'category', 'tags', 'collectionIds', 'favorite', 'status', 'trashedAt', 'deleted', 'source',
+              'savedAt', 'createdAt', 'updatedAt', 'embedStatus', 'embedCheckedAt', 'needsResolve',
+              'needsMeta', 'schemaVersion'];
     }
 
     function saveRequired() {
@@ -110,9 +115,9 @@ service cloud.firestore {
     // Fields an edit may change. The link and its identity never change: a resolved short
     // link becomes a new document instead.
     function saveEditable() {
-      return ['author', 'title', 'thumb', 'note', 'tags', 'collectionIds', 'favorite', 'status', 'trashedAt',
-              'savedAt', 'updatedAt', 'embedStatus', 'embedCheckedAt', 'needsResolve', 'needsMeta',
-              'schemaVersion'];
+      return ['author', 'title', 'thumb', 'note', 'category', 'tags', 'collectionIds', 'favorite', 'status',
+              'trashedAt', 'savedAt', 'updatedAt', 'embedStatus', 'embedCheckedAt', 'needsResolve',
+              'needsMeta', 'schemaVersion'];
     }
 
     function isSave(d) {
@@ -121,6 +126,7 @@ service cloud.firestore {
         && d.platform in platforms() && d.kind in kinds()
         && (d.platformId == null || isString(d.platformId, 1, 300))
         && optString(d, 'author', 100) && optString(d, 'title', 500) && optString(d, 'note', 5000)
+        && optCategory(d)
         // Only thumbnails whose URLs don't expire.
         && d.get('thumb', 'https://i.ytimg.com/').matches('^https://i[.]ytimg[.]com/[^ ]{0,300}$')
         && isTagList(d.tags) && isIdList(d.collectionIds, 50)
@@ -164,8 +170,8 @@ service cloud.firestore {
     // beside the saved links, so it syncs, is trashed and deleted exactly like them.
 
     function textFields() {
-      return ['text', 'platform', 'note', 'tags', 'collectionIds', 'favorite', 'status', 'trashedAt', 'deleted',
-              'source', 'savedAt', 'createdAt', 'updatedAt', 'schemaVersion'];
+      return ['text', 'platform', 'note', 'category', 'tags', 'collectionIds', 'favorite', 'status', 'trashedAt',
+              'deleted', 'source', 'savedAt', 'createdAt', 'updatedAt', 'schemaVersion'];
     }
 
     function textRequired() {
@@ -175,8 +181,8 @@ service cloud.firestore {
 
     // The text itself never changes: its id is its hash.
     function textEditable() {
-      return ['note', 'tags', 'collectionIds', 'favorite', 'status', 'trashedAt', 'savedAt', 'updatedAt',
-              'schemaVersion'];
+      return ['note', 'category', 'tags', 'collectionIds', 'favorite', 'status', 'trashedAt', 'savedAt',
+              'updatedAt', 'schemaVersion'];
     }
 
     function isText(d) {
@@ -184,6 +190,7 @@ service cloud.firestore {
         && isString(d.text, 1, 10000)
         && d.platform == 'text'
         && optString(d, 'note', 5000)
+        && optCategory(d)
         && isTagList(d.tags) && isIdList(d.collectionIds, 50)
         && d.favorite is bool
         && (d.status == 'active' || (d.status == 'trashed' && d.get('trashedAt', null) is timestamp))
@@ -214,6 +221,19 @@ service cloud.firestore {
         && d.keys().hasAll(['name', 'order', 'createdAt', 'updatedAt', 'deleted'])
         && isString(d.name, 1, 60) && optString(d, 'emoji', 16)
         && d.get('color', '#000000').matches('^#[0-9a-fA-F]{6}$')
+        && d.order is number
+        && d.createdAt is timestamp && d.updatedAt == request.time
+        && d.deleted == false;
+    }
+
+    // ---------- categories ----------
+
+    // A kind of save the owner made themself ("Recipes"), with an emoji as its symbol. The
+    // ready-made ones (note, quote, ...) are ids in packages/core and have no document.
+    function isCategory(d) {
+      return d.keys().hasOnly(['name', 'symbol', 'order', 'createdAt', 'updatedAt', 'deleted'])
+        && d.keys().hasAll(['name', 'symbol', 'order', 'createdAt', 'updatedAt', 'deleted'])
+        && isString(d.name, 1, 40) && isString(d.symbol, 1, 16)
         && d.order is number
         && d.createdAt is timestamp && d.updatedAt == request.time
         && d.deleted == false;
@@ -296,6 +316,18 @@ service cloud.firestore {
         allow update: if isVerifiedOwner(uid) && (
           isTombstone(request.resource.data)
           || (isCollection(request.resource.data)
+              && request.resource.data.createdAt == (wasDeleted() ? request.time : resource.data.createdAt)));
+        allow delete: if isVerifiedOwner(uid) && canHardDelete(uid);
+      }
+
+      match /categories/{cid} {
+        allow read: if isOwner(uid);
+        allow create: if isVerifiedOwner(uid) && cid.matches('^[A-Za-z0-9]{1,40}$')
+          && (isTombstone(request.resource.data)
+              || (isCategory(request.resource.data) && request.resource.data.createdAt == request.time));
+        allow update: if isVerifiedOwner(uid) && (
+          isTombstone(request.resource.data)
+          || (isCategory(request.resource.data)
               && request.resource.data.createdAt == (wasDeleted() ? request.time : resource.data.createdAt)));
         allow delete: if isVerifiedOwner(uid) && canHardDelete(uid);
       }

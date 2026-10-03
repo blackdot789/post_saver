@@ -2,6 +2,7 @@ import { arrayUnion, doc, serverTimestamp, setDoc, Timestamp, updateDoc } from "
 import { useCallback, useEffect, useRef, useState } from "react";
 import { newSave, newText, parse, type SaveSource } from "@postsaver/core";
 import type { RemoteConfig } from "../data/appConfig.ts";
+import { DEFAULT_SYMBOL, createCategory, findCategory, type CategoryIndex } from "../data/categories.ts";
 import { createCollection, newCollectionId, type Collection } from "../data/collections.ts";
 import { trashSave } from "../data/edits.ts";
 import { getDb, saveRef } from "../data/firestore.ts";
@@ -76,17 +77,17 @@ function report(job: ImportJob, status: "running" | "paused" | "done" | "cancell
  * `config` is `config/app` once it has been read, null before: nothing is imported until the
  * day's limit and the remote pause are known.
  */
-export function useImport(uid: string, library: Library, collections: readonly Collection[], config: RemoteConfig | null): ImportControls {
+export function useImport(uid: string, library: Library, collections: readonly Collection[], categories: CategoryIndex, config: RemoteConfig | null): ImportControls {
   const [job, setJob] = useState<ImportJob | null>(null);
   const [finished, setFinished] = useState<ImportSummary | null>(null);
   // Bumped after every step, to run the next one.
   const [tick, setTick] = useState(0);
   const busy = useRef(false);
-  const latest = useRef({ library, collections });
+  const latest = useRef({ library, collections, categories });
   // The job as the person last left it, for a step that's still running when they pause or cancel.
   const current = useRef<ImportJob | null>(null);
   useEffect(() => {
-    latest.current = { library, collections };
+    latest.current = { library, collections, categories };
     current.current = job;
   });
 
@@ -132,7 +133,7 @@ export function useImport(uid: string, library: Library, collections: readonly C
 
   /** Deals with the next few entries. Resolves with the job as it is afterwards, and whether that was the last of it. */
   async function step(from: ImportJob, allowed: number): Promise<{ next: ImportJob; complete: boolean }> {
-    const next: ImportJob = { ...from, collectionIds: { ...from.collectionIds } };
+    const next: ImportJob = { ...from, collectionIds: { ...from.collectionIds }, categoryIds: { ...from.categoryIds } };
     const total = jobTotal(next);
     const have = new Map(latest.current.library.saves.map((s) => [s.id, s]));
     const source = `import-${next.type}` as SaveSource;
@@ -152,6 +153,21 @@ export function useImport(uid: string, library: Library, collections: readonly C
       return id;
     };
 
+    // Categories too: a ready-made one or one the account has, by name; otherwise it's made.
+    const made = next.categoryIds ?? {};
+    const categoryId = (category: { name: string; symbol?: string }): string => {
+      const key = category.name.toLowerCase();
+      let id = findCategory(category.name, latest.current.categories)?.id ?? made[key];
+      if (!id) {
+        const created = createCategory(next.uid, category.name, category.symbol ?? DEFAULT_SYMBOL, latest.current.categories.size + Object.keys(made).length);
+        created.done.catch(forget);
+        id = created.id;
+        made[key] = id;
+        writes++;
+      }
+      return id;
+    };
+
     const end = Math.min(total, next.cursor + CHUNK);
     while (next.cursor < end && writes < allowed) {
       const at = next.cursor++;
@@ -161,7 +177,14 @@ export function useImport(uid: string, library: Library, collections: readonly C
         const link = entry.text ? null : parse(entry.url);
         // Saved some other way since the import was planned: nothing to do.
         if ((!link && !entry.text) || have.has(entry.id)) continue;
-        const options = { source, now, savedAt: entry.savedAt ? Timestamp.fromMillis(entry.savedAt) : now, tags: entry.tags, note: entry.note };
+        const options = {
+          source,
+          now,
+          savedAt: entry.savedAt ? Timestamp.fromMillis(entry.savedAt) : now,
+          tags: entry.tags,
+          note: entry.note,
+          ...(entry.category ? { category: categoryId(entry.category) } : {}),
+        };
         setDoc(saveRef(next.uid, entry.id), {
           ...(link ? newSave(link, options) : newText(entry.text ?? "", options)),
           collectionIds: entry.collections.map(collectionId),
@@ -220,6 +243,7 @@ export function useImport(uid: string, library: Library, collections: readonly C
         added: 0,
         changed: 0,
         collectionIds: {},
+        categoryIds: {},
         paused: false,
       };
       if (jobTotal(fresh) === 0) {

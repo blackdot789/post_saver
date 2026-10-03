@@ -20,6 +20,7 @@ function extrasOf(data: DocumentData): Extras {
     collectionIds: strings(data.collectionIds),
     favorite: data.favorite === true,
     ...(typeof data.note === "string" && data.note ? { note: data.note } : {}),
+    ...(typeof data.category === "string" && data.category ? { category: data.category } : {}),
   };
 }
 
@@ -47,12 +48,18 @@ export async function applyResolved(uid: string, save: LibrarySave, finalUrl: st
     (snap) => (snap.exists() ? snap.data() : null),
     () => null,
   );
-  const mine: Extras = { tags: save.tags, collectionIds: save.collectionIds, favorite: save.favorite, ...(save.note ? { note: save.note } : {}) };
+  const mine: Extras = {
+    tags: save.tags,
+    collectionIds: save.collectionIds,
+    favorite: save.favorite,
+    ...(save.note ? { note: save.note } : {}),
+    ...(save.category ? { category: save.category } : {}),
+  };
 
   const batch = writeBatch(getDb());
   if (planSave(existing) === "create" || !existing) {
     batch.set(newRef, {
-      ...newSave(link, { source: save.source, now, savedAt: save.savedAt ? Timestamp.fromDate(save.savedAt) : now, tags: save.tags, note: save.note }),
+      ...newSave(link, { source: save.source, now, savedAt: save.savedAt ? Timestamp.fromDate(save.savedAt) : now, tags: save.tags, note: save.note, category: save.category }),
       // The link as it was shared stays on record.
       originalUrl: save.originalUrl,
       collectionIds: save.collectionIds,

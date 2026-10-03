@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  BUILT_IN_CATEGORIES,
   LIMITS,
   PLATFORMS,
   SAVE_PLATFORMS,
   SCHEMA_VERSION,
+  cleanCategoryName,
   cleanText,
+  isCategoryId,
   moveToTop,
+  newCategory,
   newSave,
   newText,
   newUserDoc,
@@ -199,5 +203,56 @@ describe("newText", () => {
   it("is filed beside the platforms, never as one of them", () => {
     expect(SAVE_PLATFORMS).toEqual([...PLATFORMS, "text"]);
     expect(PLATFORMS).not.toContain("text");
+  });
+});
+
+describe("categories", () => {
+  it("the ready-made ones have ids the rules accept, each different", () => {
+    expect(BUILT_IN_CATEGORIES.map((c) => c.id)).toEqual(["note", "quote", "command", "article", "blog"]);
+    for (const c of BUILT_IN_CATEGORIES) {
+      expect(isCategoryId(c.id)).toBe(true);
+      expect(c.name).not.toBe("");
+      expect(c.symbol.length).toBeGreaterThan(0);
+      expect(c.symbol.length).toBeLessThanOrEqual(LIMITS.emoji);
+    }
+  });
+
+  it.each([
+    ["", false],
+    ["note", true],
+    ["Qx7Lm2Vt9KpRw4Zs8NbY", true],
+    ["my notes", false],
+    ["a/b", false],
+    ["x".repeat(40), true],
+    ["x".repeat(41), false],
+    [7, false],
+    [undefined, false],
+  ])("isCategoryId(%j) is %s", (value, ok) => expect(isCategoryId(value)).toBe(ok));
+
+  it("a new save or text carries its category, and leaves out one that isn't an id", () => {
+    const link = parse("https://example.com/how-to-bake");
+    if (!link) throw new Error("no link");
+    expect(newSave(link, { source: "web", now: 1, category: "article" }).category).toBe("article");
+    expect(newSave(link, { source: "web", now: 1 })).not.toHaveProperty("category");
+    expect(newSave(link, { source: "web", now: 1, category: "not an id" })).not.toHaveProperty("category");
+    expect(newText("ls -la", { source: "paste", now: 1, category: "command" }).category).toBe("command");
+    expect(newText("ls -la", { source: "paste", now: 1, category: "" })).not.toHaveProperty("category");
+  });
+
+  it("cleans a name: single spaces, trimmed, cut by whole characters", () => {
+    expect(cleanCategoryName("  My \n  recipes ")).toBe("My recipes");
+    expect(cleanCategoryName("😀".repeat(50))).toBe("😀".repeat(LIMITS.categoryName / 2));
+    expect(cleanCategoryName("   ")).toBe("");
+  });
+
+  it("newCategory builds the document the rules expect", () => {
+    expect(newCategory({ name: " Recipes ", symbol: "🍳", order: 2, now: "server-time" })).toEqual({
+      name: "Recipes",
+      symbol: "🍳",
+      order: 2,
+      createdAt: "server-time",
+      updatedAt: "server-time",
+      deleted: false,
+    });
   });
 });

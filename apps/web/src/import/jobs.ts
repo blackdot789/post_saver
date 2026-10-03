@@ -22,6 +22,8 @@ export interface ImportJob {
   changed: number;
   /** Collections found or created so far: lower-case name → id. */
   collectionIds: Record<string, string>;
+  /** Categories created so far: lower-case name → id (absent in a job stored by an older version). */
+  categoryIds?: Record<string, string>;
   /** Paused by the person. */
   paused: boolean;
 }

@@ -3,6 +3,7 @@ import type { User } from "firebase/auth";
 import { site } from "@postsaver/config";
 import { cancelDeletion, confirmOwner, deleteAccount, signInKind, type DeleteProgress } from "../account/delete.ts";
 import { authErrorMessage } from "../auth/errors.ts";
+import type { CategoryIndex } from "../data/categories.ts";
 import type { Collection } from "../data/collections.ts";
 import { errorCode } from "../data/firestore.ts";
 import { buildExport, download, type ExportFormat } from "../export/build.ts";
@@ -36,6 +37,7 @@ function HowTo({ title, children }: { title: string; children: ReactNode }) {
 interface ImportDialogProps {
   saves: readonly LibrarySave[];
   collections: readonly Collection[];
+  categories: CategoryIndex;
   controls: ImportControls;
   /** What the account last chose for posts unsaved on Instagram. */
   onUnsave: "remove" | "keep";
@@ -45,7 +47,7 @@ interface ImportDialogProps {
 
 type ImportPhase = { kind: "pick"; error?: string } | { kind: "reading"; name: string } | { kind: "ready"; name: string; plan: ImportPlan };
 
-export function ImportDialog({ saves, collections, controls, onUnsave, onChooseUnsave, onClose }: ImportDialogProps) {
+export function ImportDialog({ saves, collections, categories, controls, onUnsave, onChooseUnsave, onClose }: ImportDialogProps) {
   const [phase, setPhase] = useState<ImportPhase>({ kind: "pick" });
   const [unsave, setUnsave] = useState(onUnsave);
   const [starting, setStarting] = useState(false);
@@ -55,7 +57,7 @@ export function ImportDialog({ saves, collections, controls, onUnsave, onChooseU
     setPhase({ kind: "reading", name: file.name });
     try {
       const parsed = await readImportFile(file);
-      const plan = await planImport(parsed, saves, new Map(collections.map((c) => [c.id, c.name])));
+      const plan = await planImport(parsed, saves, new Map(collections.map((c) => [c.id, c.name])), categories);
       setPhase({ kind: "ready", name: file.name, plan });
     } catch (error) {
       setPhase({ kind: "pick", error: error instanceof ImportError ? error.message : "That file couldn't be read. Is it the right one?" });
@@ -124,6 +126,7 @@ export function ImportDialog({ saves, collections, controls, onUnsave, onChooseU
           )}
           {plan.invalid > 0 && <li>{n(plan.invalid, "entry", "entries")} had no usable link</li>}
           {plan.collections.length > 0 && <li>Collections: {plan.collections.join(", ")}</li>}
+          {plan.categories.length > 0 && <li>New categories: {plan.categories.map((c) => c.name).join(", ")}</li>}
         </ul>
         {nothing && <p className="mt-3 text-sm font-medium">There's nothing new in this file.</p>}
         {days > 1 && (
@@ -263,12 +266,12 @@ export function ImportBanner({ controls }: { controls: ImportControls }) {
 // ---------- export ----------
 
 const FORMATS: Array<{ format: ExportFormat; label: string; hint: string }> = [
-  { format: "json", label: "Everything (JSON)", hint: "All saves with their tags, notes, collections and dates. This app can import it again." },
+  { format: "json", label: "Everything (JSON)", hint: "All saves with their categories, tags, notes, collections and dates. This app can import it again." },
   { format: "csv", label: "Spreadsheet (CSV)", hint: "One row per save, for Excel, Numbers or Google Sheets." },
   { format: "html", label: "Bookmarks (HTML)", hint: "For any browser or bookmarking service. Collections become folders." },
 ];
 
-export function ExportDialog({ saves, collections, synced, onClose }: { saves: readonly LibrarySave[]; collections: readonly Collection[]; synced: boolean; onClose: () => void }) {
+export function ExportDialog({ saves, collections, categories, synced, onClose }: { saves: readonly LibrarySave[]; collections: readonly Collection[]; categories: CategoryIndex; synced: boolean; onClose: () => void }) {
   const active = saves.filter((s) => s.status === "active").length;
   const trashed = saves.length - active;
   return (
@@ -289,7 +292,7 @@ export function ExportDialog({ saves, collections, synced, onClose }: { saves: r
               <span className="font-medium">{label}</span>
               <span className="block text-xs text-slate-500 dark:text-slate-400">{hint}</span>
             </span>
-            <Button variant="secondary" size="sm" className="shrink-0" aria-label={`Download ${label}`} onClick={() => download(buildExport(format, saves, collections, `${site.brand.name} saves`))}>
+            <Button variant="secondary" size="sm" className="shrink-0" aria-label={`Download ${label}`} onClick={() => download(buildExport(format, saves, collections, categories, `${site.brand.name} saves`))}>
               Download
             </Button>
           </li>

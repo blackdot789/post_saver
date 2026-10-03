@@ -16,6 +16,7 @@ export const LIMITS = {
   tagLength: 40,
   collectionIds: 50,
   collectionName: 60,
+  categoryName: 40,
   emoji: 16,
   displayName: 100,
   importTotal: 100_000,
@@ -63,6 +64,8 @@ export interface SaveDoc<T> {
   title?: string;
   thumb?: string;
   note?: string;
+  /** What kind of thing its owner calls it: the id of a category (below). */
+  category?: string;
   tags: string[];
   collectionIds: string[];
   favorite: boolean;
@@ -99,6 +102,7 @@ export interface TextDoc<T> {
   text: string;
   platform: typeof TEXT_PLATFORM;
   note?: string;
+  category?: string;
   tags: string[];
   collectionIds: string[];
   favorite: boolean;
@@ -112,7 +116,41 @@ export interface TextDoc<T> {
   schemaVersion: number;
 }
 
-/** What a deleted save or collection becomes, so other devices learn about the delete. */
+/**
+ * A category says what kind of thing a save is, as its owner sees it: a note, a quote, a
+ * command, or a kind of their own. A save has one at most (`category`, the category's id);
+ * without one it's filed under where it came from (its platform, or "text").
+ */
+export interface CategoryInfo {
+  id: string;
+  name: string;
+  /** An emoji, shown beside the name. */
+  symbol: string;
+}
+
+/** The categories every account has. Their ids are fixed: saves store them. */
+export const BUILT_IN_CATEGORIES: readonly CategoryInfo[] = [
+  { id: "note", name: "Note", symbol: "📝" },
+  { id: "quote", name: "Quote", symbol: "💬" },
+  { id: "command", name: "Command", symbol: "⌨️" },
+  { id: "article", name: "Article", symbol: "📰" },
+  { id: "blog", name: "Blog", symbol: "✍️" },
+];
+
+/** A category id as the rules accept it: a built-in id, or the id of a categories/{cid} document. */
+export const isCategoryId = (value: unknown): value is string => typeof value === "string" && /^[A-Za-z0-9]{1,40}$/.test(value);
+
+/** `/users/{uid}/categories/{cid}`: a category the owner made. */
+export interface CategoryDoc<T> {
+  name: string;
+  symbol: string;
+  order: number;
+  createdAt: T;
+  updatedAt: T;
+  deleted: false;
+}
+
+/** What a deleted save, collection or category becomes, so other devices learn about the delete. */
 export interface Tombstone<T> {
   deleted: true;
   updatedAt: T;
@@ -215,10 +253,12 @@ export interface NewSaveOptions<T> {
   savedAt?: T;
   tags?: readonly string[];
   note?: string;
+  /** A category id; anything else is left out. */
+  category?: string;
 }
 
 /** A new save document for a parsed link, in the exact shape the rules accept. */
-export function newSave<T>(link: ParsedLink, { source, now, savedAt, tags, note }: NewSaveOptions<T>): SaveDoc<T> {
+export function newSave<T>(link: ParsedLink, { source, now, savedAt, tags, note, category }: NewSaveOptions<T>): SaveDoc<T> {
   const trimmedNote = note?.trim().slice(0, LIMITS.note);
   return {
     url: link.canonicalUrl,
@@ -228,6 +268,7 @@ export function newSave<T>(link: ParsedLink, { source, now, savedAt, tags, note 
     platformId: link.platformId,
     ...(link.author ? { author: link.author.slice(0, LIMITS.author) } : {}),
     ...(trimmedNote ? { note: trimmedNote } : {}),
+    ...(isCategoryId(category) ? { category } : {}),
     tags: normalizeTags(tags ?? []),
     collectionIds: [],
     favorite: false,
@@ -266,12 +307,13 @@ export function cleanText(raw: string): string | null {
 }
 
 /** A new saved text, in the exact shape the rules accept. `text` is what cleanText() returned. */
-export function newText<T>(text: string, { source, now, savedAt, tags, note }: NewSaveOptions<T>): TextDoc<T> {
+export function newText<T>(text: string, { source, now, savedAt, tags, note, category }: NewSaveOptions<T>): TextDoc<T> {
   const trimmedNote = note?.trim().slice(0, LIMITS.note);
   return {
     text,
     platform: TEXT_PLATFORM,
     ...(trimmedNote ? { note: trimmedNote } : {}),
+    ...(isCategoryId(category) ? { category } : {}),
     tags: normalizeTags(tags ?? []),
     collectionIds: [],
     favorite: false,
@@ -285,7 +327,23 @@ export function newText<T>(text: string, { source, now, savedAt, tags, note }: N
   };
 }
 
-/** The tombstone that replaces a deleted save or collection. */
+/** A category's name as stored: single spaces, trimmed, at most LIMITS.categoryName UTF-16 units. */
+export function cleanCategoryName(raw: string): string {
+  let out = "";
+  // By code point, so the limit never cuts a character in half.
+  for (const ch of raw.replace(/\s+/g, " ").trim()) {
+    if (out.length + ch.length > LIMITS.categoryName) break;
+    out += ch;
+  }
+  return out.trim();
+}
+
+/** A new category of the owner's own, in the exact shape the rules accept. */
+export function newCategory<T>({ name, symbol, order, now }: { name: string; symbol: string; order: number; now: T }): CategoryDoc<T> {
+  return { name: cleanCategoryName(name), symbol, order, createdAt: now, updatedAt: now, deleted: false };
+}
+
+/** The tombstone that replaces a deleted save, collection or category. */
 export function tombstone<T>(now: T): Tombstone<T> {
   return { deleted: true, updatedAt: now, schemaVersion: SCHEMA_VERSION };
 }

@@ -107,6 +107,9 @@ describe("what a lookup changes", () => {
     });
     // The post's own note and favorite stay; nothing new means nothing to write.
     expect(mergeExtras({ ...post, favorite: true, note: "theirs" }, { tags: ["a"], collectionIds: [], favorite: false, note: "mine" })).toBeNull();
+    // A category comes along, unless the post has one of its own.
+    expect(mergeExtras(post, { tags: [], collectionIds: [], favorite: false, category: "article" })).toEqual({ category: "article" });
+    expect(mergeExtras({ ...post, category: "blog" }, { tags: [], collectionIds: [], favorite: false, category: "article" })).toBeNull();
     // Never past the limits the rules enforce.
     const many = Array.from({ length: 40 }, (_, i) => `t${i}`);
     expect(mergeExtras(post, { tags: many, collectionIds: [], favorite: false })?.tags).toHaveLength(30);

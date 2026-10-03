@@ -87,11 +87,13 @@ export interface Extras {
   collectionIds: string[];
   favorite: boolean;
   note?: string;
+  category?: string;
 }
 
 /**
  * What the save of a post gains when a short link to the same post is folded into it
- * (CLAUDE.md §6.2): the short link's tags, collections, favorite and note. Null when nothing.
+ * (CLAUDE.md §6.2): the short link's tags, collections, favorite, note and category (its own
+ * note and category are kept). Null when nothing.
  */
 export function mergeExtras(into: Extras, from: Extras): Partial<Extras> | null {
   const tags = [...new Set([...into.tags, ...from.tags])].slice(0, LIMITS.tags);
@@ -101,6 +103,7 @@ export function mergeExtras(into: Extras, from: Extras): Partial<Extras> | null 
     ...(collectionIds.length > into.collectionIds.length ? { collectionIds } : {}),
     ...(from.favorite && !into.favorite ? { favorite: true } : {}),
     ...(from.note && !into.note ? { note: from.note } : {}),
+    ...(from.category && !into.category ? { category: from.category } : {}),
   };
   return Object.keys(changes).length > 0 ? changes : null;
 }

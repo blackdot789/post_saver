@@ -18,6 +18,8 @@ interface SaveFields {
   title?: string;
   thumb?: string;
   note?: string;
+  /** The id of its category, if it was given one (data/categories.ts). */
+  category?: string;
   tags: string[];
   collectionIds: string[];
   favorite: boolean;
@@ -88,6 +90,7 @@ export function toLibrarySave(id: string, data: DocumentData, pending: boolean):
     ...opt("title"),
     ...opt("thumb"),
     ...opt("note"),
+    ...opt("category"),
     tags: strings(data.tags),
     collectionIds: strings(data.collectionIds),
     favorite: data.favorite === true,

@@ -1,11 +1,12 @@
 import MiniSearch from "minisearch";
 import { useMemo } from "react";
+import { categoryOf, type CategoryIndex } from "../data/categories.ts";
 import { PLATFORM_NAMES } from "../lib/platforms.ts";
 import type { LibrarySave } from "../sync/library.ts";
 
 // Search happens in memory, over the device's copy of the library (CLAUDE.md §6.5): title,
-// author, tags, note, platform, the link, and the words of a saved text. Prefix and fuzzy matching, so "recipe" finds
-// "recipes" and "instagram" finds Instagram posts.
+// author, tags, note, platform, category, the link, and the words of a saved text. Prefix and
+// fuzzy matching, so "recipe" finds "recipes" and "instagram" finds Instagram posts.
 
 interface Doc {
   id: string;
@@ -14,11 +15,12 @@ interface Doc {
   tags: string;
   note: string;
   platform: string;
+  category: string;
   url: string;
   text: string;
 }
 
-function toDoc(s: LibrarySave): Doc {
+function toDoc(s: LibrarySave, categories: CategoryIndex): Doc {
   return {
     id: s.id,
     title: s.title ?? "",
@@ -26,22 +28,23 @@ function toDoc(s: LibrarySave): Doc {
     tags: s.tags.join(" "),
     note: s.note ?? "",
     platform: PLATFORM_NAMES[s.platform],
+    category: categoryOf(s, categories)?.name ?? "",
     url: s.url.replace(/^https?:\/\/(www\.)?/, "").replace(/[/?&=._-]+/g, " "),
     text: s.text ?? "",
   };
 }
 
 /** Returns a function that gives the ids matching a search, or undefined for an empty search. */
-export function useSearch(saves: readonly LibrarySave[]): (q: string) => Set<string> | undefined {
+export function useSearch(saves: readonly LibrarySave[], categories: CategoryIndex): (q: string) => Set<string> | undefined {
   const index = useMemo(() => {
     const mini = new MiniSearch<Doc>({
-      fields: ["title", "author", "tags", "note", "platform", "url", "text"],
+      fields: ["title", "author", "tags", "note", "platform", "category", "url", "text"],
       storeFields: [],
       searchOptions: { prefix: true, fuzzy: 0.2, boost: { title: 2, tags: 2, author: 1.5 } },
     });
-    mini.addAll(saves.map(toDoc));
+    mini.addAll(saves.map((s) => toDoc(s, categories)));
     return mini;
-  }, [saves]);
+  }, [saves, categories]);
   return (q: string) => {
     const term = q.trim();
     if (!term) return undefined;

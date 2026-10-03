@@ -1,4 +1,5 @@
 import { TEXT_PLATFORM } from "@postsaver/core";
+import { categoryOf, type CategoryIndex } from "../data/categories.ts";
 import type { Collection } from "../data/collections.ts";
 import { BACKUP_APP } from "../import/backup.ts";
 import { describeLink, displayHost } from "../lib/platforms.ts";
@@ -18,8 +19,13 @@ const collectionNames = (save: LibrarySave, names: Names): string[] => save.coll
 /** Newest first, like the library. */
 const ordered = (saves: readonly LibrarySave[]) => [...saves].sort((a, b) => (b.savedAt?.getTime() ?? 0) - (a.savedAt?.getTime() ?? 0));
 
-export function toJson(saves: readonly LibrarySave[], collections: readonly Collection[], now: Date): string {
+export function toJson(saves: readonly LibrarySave[], collections: readonly Collection[], categories: CategoryIndex, now: Date): string {
   const names = namesOf(collections);
+  // By name and symbol, so the file means the same in another account.
+  const category = (s: LibrarySave) => {
+    const c = categoryOf(s, categories);
+    return c ? { category: { name: c.name, symbol: c.symbol } } : {};
+  };
   return JSON.stringify(
     {
       app: BACKUP_APP,
@@ -30,6 +36,7 @@ export function toJson(saves: readonly LibrarySave[], collections: readonly Coll
         ...(s.author ? { author: s.author } : {}),
         ...(s.title ? { title: s.title } : {}),
         ...(s.note ? { note: s.note } : {}),
+        ...category(s),
         tags: s.tags,
         collections: collectionNames(s, names),
         favorite: s.favorite,
@@ -50,10 +57,10 @@ function cell(value: string, text = true): string {
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
 }
 
-const CSV_HEADINGS = ["url", "title", "platform", "author", "tags", "note", "collections", "favorite", "saved at", "text"];
+const CSV_HEADINGS = ["url", "title", "platform", "author", "tags", "note", "collections", "favorite", "saved at", "text", "category"];
 
 /** The saves that aren't in the Trash, one per row. */
-export function toCsv(saves: readonly LibrarySave[], collections: readonly Collection[]): string {
+export function toCsv(saves: readonly LibrarySave[], collections: readonly Collection[], categories: CategoryIndex): string {
   const names = namesOf(collections);
   const rows = ordered(saves)
     .filter((s) => s.status === "active")
@@ -69,6 +76,7 @@ export function toCsv(saves: readonly LibrarySave[], collections: readonly Colle
         s.favorite ? "yes" : "",
         s.savedAt ? s.savedAt.toISOString() : "",
         cell(s.text ?? ""),
+        cell(categoryOf(s, categories)?.name ?? ""),
       ].join(","),
     );
   return `${[CSV_HEADINGS.join(","), ...rows].join("\r\n")}\r\n`;
@@ -116,8 +124,15 @@ export type ExportFormat = "json" | "csv" | "html";
 const MIME: Record<ExportFormat, string> = { json: "application/json", csv: "text/csv", html: "text/html" };
 
 /** The file for a format: its name (with today's date), type and content. */
-export function buildExport(format: ExportFormat, saves: readonly LibrarySave[], collections: readonly Collection[], folder: string, now = new Date()): { name: string; mime: string; content: string } {
-  const content = format === "json" ? toJson(saves, collections, now) : format === "csv" ? toCsv(saves, collections) : toBookmarksHtml(saves, collections, folder);
+export function buildExport(
+  format: ExportFormat,
+  saves: readonly LibrarySave[],
+  collections: readonly Collection[],
+  categories: CategoryIndex,
+  folder: string,
+  now = new Date(),
+): { name: string; mime: string; content: string } {
+  const content = format === "json" ? toJson(saves, collections, categories, now) : format === "csv" ? toCsv(saves, collections, categories) : toBookmarksHtml(saves, collections, folder);
   // A BOM, so spreadsheets read accents in the CSV correctly.
   return { name: `${BACKUP_APP}-export-${now.toISOString().slice(0, 10)}.${format}`, mime: `${MIME[format]};charset=utf-8`, content: format === "csv" ? `﻿${content}` : content };
 }

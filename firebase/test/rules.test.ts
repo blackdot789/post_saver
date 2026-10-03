@@ -6,11 +6,13 @@ import {
   type RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
 import {
+  BUILT_IN_CATEGORIES,
   KINDS,
   LIMITS,
   PLATFORMS,
   cleanText,
   moveToTop,
+  newCategory,
   newSave,
   newText,
   newUserDoc,
@@ -577,6 +579,111 @@ describe("saved text", () => {
     await assertSucceeds(setDoc(doc(db("alice"), t.path), (await textFor(NOTE)).data));
     await seed(t.path, tombstone(past(61)));
     await assertSucceeds(deleteDoc(doc(db("alice"), t.path)));
+  });
+});
+
+describe("a save's category", () => {
+  it.each(BUILT_IN_CATEGORIES.map((c) => [c.name, c.id]))("a text can be saved as a %s", async (_name, category) => {
+    const t = await textFor(NOTE, { category });
+    expect(t.data.category).toBe(category);
+    await assertSucceeds(setDoc(doc(db("alice"), t.path), t.data));
+  });
+
+  it("a link can be saved with one, also one of the owner's own", async () => {
+    const s = await saveFor("https://example.com/how-to-bake", { category: "Qx7Lm2Vt9KpRw4Zs8NbY" });
+    await assertSucceeds(setDoc(doc(db("alice"), s.path), s.data));
+  });
+
+  it("the owner can set, change and remove it later, on a link and on a text", async () => {
+    for (const s of [await existingSave(), await existingText()]) {
+      const ref = doc(db("alice"), s.path);
+      await assertSucceeds(updateDoc(ref, { category: "command", updatedAt: serverTimestamp() }));
+      await assertSucceeds(updateDoc(ref, { category: "Qx7Lm2Vt9KpRw4Zs8NbY", updatedAt: serverTimestamp() }));
+      await assertSucceeds(updateDoc(ref, { category: deleteField(), updatedAt: serverTimestamp() }));
+    }
+  });
+
+  it.each([
+    ["an empty id", ""],
+    ["an id with other characters", "my notes!"],
+    ["an id that is a path", "a/b"],
+    ["an id over 40 characters", "x".repeat(41)],
+    ["a number", 7],
+    ["a list", ["note"]],
+    ["null", null],
+  ])("rejects %s", async (_label, category) => {
+    const t = await textFor(NOTE);
+    await assertFails(setDoc(doc(db("alice"), t.path), { ...t.data, category }));
+    const s = await saveFor(IG);
+    await assertFails(setDoc(doc(db("alice"), s.path), { ...s.data, category }));
+    const e = await existingText("another text");
+    await assertFails(updateDoc(doc(db("alice"), e.path), { category, updatedAt: serverTimestamp() }));
+  });
+
+  it("an unverified owner or a stranger can't set it", async () => {
+    const t = await existingText();
+    await assertFails(updateDoc(doc(db("unverified"), t.path), { category: "note", updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db("mallory"), t.path), { category: "note", updatedAt: serverTimestamp() }));
+  });
+});
+
+describe("categories", () => {
+  const path = "users/alice/categories/Qx7Lm2Vt9KpRw4Zs8NbY";
+  const cat = (extra: DocumentData = {}) => ({ ...newCategory({ name: "Recipes", symbol: "🍳", order: 0, now: serverTimestamp() }), ...extra });
+
+  it("the owner can create one, rename it, change its symbol and delete it (a tombstone)", async () => {
+    await assertSucceeds(setDoc(doc(db("alice"), path), cat()));
+    await assertSucceeds(updateDoc(doc(db("alice"), path), { name: "Cooking", symbol: "👩🏽‍🍳", updatedAt: serverTimestamp() }));
+    await assertSucceeds(setDoc(doc(db("alice"), path), tombstone(serverTimestamp())));
+    // The same id can come back (e.g. recreated on a device that was offline).
+    await assertSucceeds(setDoc(doc(db("alice"), path), cat()));
+  });
+  it("a name of 40 characters in any script is fine", async () => {
+    await assertSucceeds(setDoc(doc(db("alice"), path), cat({ name: "न".repeat(LIMITS.categoryName) })));
+  });
+  it.each([
+    ["an empty name", { name: "" }],
+    ["a name over 40 characters", { name: "x".repeat(LIMITS.categoryName + 1) }],
+    ["no symbol", { symbol: "" }],
+    ["a symbol over 16 characters", { symbol: "x".repeat(LIMITS.emoji + 1) }],
+    ["a symbol that isn't text", { symbol: 5 }],
+    ["an order that isn't a number", { order: "first" }],
+    ["an unknown field", { shared: true }],
+    ["a device time instead of the server's", { updatedAt: past(1) }],
+  ])("rejects %s", async (_label, extra) => {
+    await assertFails(setDoc(doc(db("alice"), path), cat(extra)));
+  });
+  it("rejects a missing symbol", async () => {
+    const { symbol: _dropped, ...data } = cat();
+    await assertFails(setDoc(doc(db("alice"), path), data));
+  });
+  it("rejects a bad id", async () => {
+    await assertFails(setDoc(doc(db("alice"), "users/alice/categories/bad-id!"), cat()));
+  });
+  it("createdAt can't be changed later", async () => {
+    await seed(path, { ...cat(), createdAt: past(5), updatedAt: past(5) });
+    await assertFails(updateDoc(doc(db("alice"), path), { createdAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+  });
+  it("an unverified owner can read but not write; others can do neither", async () => {
+    await assertFails(setDoc(doc(db("unverified"), path), cat()));
+    await assertFails(setDoc(doc(db("mallory"), path), cat()));
+    await assertFails(setDoc(doc(db("anon"), path), cat()));
+    await seed(path, { ...cat(), createdAt: past(1), updatedAt: past(1) });
+    await assertSucceeds(getDoc(doc(db("unverified"), path)));
+    await assertSucceeds(getDocs(collection(db("alice"), "users/alice/categories")));
+    await assertFails(getDoc(doc(db("mallory"), path)));
+    await assertFails(getDocs(collection(db("mallory"), "users/alice/categories")));
+  });
+  it("is hard-deleted like a save: only an old tombstone, or during account deletion", async () => {
+    await seed(path, { ...cat(), createdAt: past(5), updatedAt: past(5) });
+    await assertFails(deleteDoc(doc(db("alice"), path)));
+    await seed(path, { deleted: true, updatedAt: past(10), schemaVersion: 1 });
+    await assertFails(deleteDoc(doc(db("alice"), path)));
+    await seed(path, { deleted: true, updatedAt: past(61), schemaVersion: 1 });
+    await assertSucceeds(deleteDoc(doc(db("alice"), path)));
+    await seed(path, { ...cat(), createdAt: past(5), updatedAt: past(5) });
+    await seed("users/alice", { ...userDoc(), createdAt: past(9), updatedAt: past(9), deleting: true });
+    await assertSucceeds(deleteDoc(doc(db("alice"), path)));
   });
 });
 

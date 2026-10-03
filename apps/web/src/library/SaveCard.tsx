@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { TEXT_PLATFORM, type EmbedTheme, type Platform } from "@postsaver/core";
+import { categoryOf, isGenericPlatform, type CategoryIndex } from "../data/categories.ts";
 import { estimatePreviewHeight, Preview, titleBelow } from "../embeds-host/Preview.tsx";
+import { CategoryBadge } from "../lib/CategoryBadge.tsx";
 import { firstLine, splitLinks } from "../lib/links.ts";
-import { PlatformBadge } from "../lib/PlatformBadge.tsx";
+import { PlatformBadge, PlatformIcon } from "../lib/PlatformBadge.tsx";
 import { authorLabel, describeLink, displayHost, formatDay } from "../lib/platforms.ts";
 import type { LibrarySave, TextSave } from "../sync/library.ts";
 import { cx } from "../ui/cx.ts";
@@ -13,6 +15,7 @@ export interface SaveActions {
   favorite: (save: LibrarySave) => void;
   tags: (save: LibrarySave) => void;
   note: (save: LibrarySave) => void;
+  category: (save: LibrarySave) => void;
   collections: (save: LibrarySave) => void;
   copyLink: (save: LibrarySave) => void;
   copyText: (save: TextSave) => void;
@@ -29,6 +32,7 @@ export interface SaveCardProps {
   previews: "always" | "click";
   disabledPlatforms: readonly Platform[];
   collectionNames: ReadonlyMap<string, string>;
+  categories: CategoryIndex;
   actions: SaveActions;
   /** Select mode: a checkbox instead of the menu. */
   selecting: boolean;
@@ -78,6 +82,7 @@ function menuItems(save: LibrarySave, a: SaveActions): MenuItem[] {
   return [
     ...own,
     { label: save.favorite ? "Remove from favorites" : "Add to favorites", onSelect: () => a.favorite(save) },
+    { label: "Category…", onSelect: () => a.category(save) },
     { label: "Tags…", onSelect: () => a.tags(save) },
     { label: "Collections…", onSelect: () => a.collections(save) },
     { label: "Note…", onSelect: () => a.note(save) },
@@ -85,7 +90,15 @@ function menuItems(save: LibrarySave, a: SaveActions): MenuItem[] {
   ];
 }
 
-function Header({ save, actions, selecting, selected, onToggleSelect, date }: Pick<SaveCardProps, "save" | "actions" | "selecting" | "selected" | "onToggleSelect"> & { date?: boolean }) {
+/** "Instagram reel", "Text"; a text or page with a category goes by its category ("Command"). */
+function describeSave(save: LibrarySave, categories: CategoryIndex): string {
+  const category = categoryOf(save, categories);
+  return category && isGenericPlatform(save.platform) ? category.name : describeLink(save);
+}
+
+function Header({ save, categories, actions, selecting, selected, onToggleSelect, date }: Pick<SaveCardProps, "save" | "categories" | "actions" | "selecting" | "selected" | "onToggleSelect"> & { date?: boolean }) {
+  const category = categoryOf(save, categories);
+  const what = describeSave(save, categories);
   return (
     <div className="flex min-h-9 items-center gap-2">
       {selecting && (
@@ -93,14 +106,22 @@ function Header({ save, actions, selecting, selected, onToggleSelect, date }: Pi
           type="checkbox"
           checked={selected}
           onChange={() => onToggleSelect(save.id)}
-          aria-label={`Select ${describeLink(save)}`}
+          aria-label={`Select ${what}`}
           className="size-5 shrink-0 accent-brand-to"
         />
       )}
-      <PlatformBadge platform={save.platform} />
+      {category ? (
+        // A post keeps the mark of the app it's from beside its category.
+        <>
+          {!isGenericPlatform(save.platform) && <PlatformIcon platform={save.platform} />}
+          <CategoryBadge category={category} />
+        </>
+      ) : (
+        <PlatformBadge platform={save.platform} />
+      )}
       {save.author && <span className="truncate text-sm text-slate-500 dark:text-slate-400">{authorLabel(save.platform, save.author)}</span>}
       {date && <span className="ml-auto shrink-0 text-xs text-slate-500 dark:text-slate-400">{when(save)}</span>}
-      {!selecting && <Menu label={`Actions for ${describeLink(save)}`} items={menuItems(save, actions)} className={date ? undefined : "ml-auto"} />}
+      {!selecting && <Menu label={`Actions for ${what}`} items={menuItems(save, actions)} className={date ? undefined : "ml-auto"} />}
     </div>
   );
 }
@@ -189,7 +210,8 @@ export function estimateCardHeight(save: LibrarySave, width: number, previews: "
 
 /** One save, as a card in the grid (with its preview) or a compact row in the list. */
 export function SaveCard(props: SaveCardProps) {
-  const { save, layout, theme, previews, disabledPlatforms, collectionNames, actions, selected } = props;
+  const { save, layout, theme, previews, disabledPlatforms, collectionNames, categories, actions, selected } = props;
+  const what = describeSave(save, categories);
   const frame = cx(
     "border bg-white transition-[border-color,box-shadow] dark:bg-white/5",
     selected ? "border-brand-from ring-2 ring-brand-from/30" : "border-slate-200 hover:border-slate-300 dark:border-white/10 dark:hover:border-white/25",
@@ -255,7 +277,7 @@ export function SaveCard(props: SaveCardProps) {
   if (save.platform === TEXT_PLATFORM) {
     const hasExtras = !!(save.note || save.tags.length > 0 || save.collectionIds.length > 0);
     return (
-      <article data-save-id={save.id} tabIndex={0} aria-label={describeLink(save)} className={cx(frame, "rounded-2xl shadow-xs hover:shadow-md")}>
+      <article data-save-id={save.id} tabIndex={0} aria-label={what} className={cx(frame, "rounded-2xl shadow-xs hover:shadow-md")}>
         <div className="py-1.5 pr-1.5 pl-3.5">
           <Header {...props} />
         </div>
@@ -296,7 +318,7 @@ export function SaveCard(props: SaveCardProps) {
   const title = titleBelow(save.platform) || save.status === "trashed" ? save.title : undefined;
   const hasText = !!(title || save.note || save.tags.length > 0 || save.collectionIds.length > 0);
   return (
-    <article data-save-id={save.id} tabIndex={0} aria-label={describeLink(save)} className={cx(frame, "rounded-2xl shadow-xs hover:shadow-md")}>
+    <article data-save-id={save.id} tabIndex={0} aria-label={what} className={cx(frame, "rounded-2xl shadow-xs hover:shadow-md")}>
       <div className="py-1.5 pr-1.5 pl-3.5">
         <Header {...props} />
       </div>

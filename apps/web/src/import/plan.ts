@@ -1,4 +1,5 @@
-import { LIMITS, cleanText, normalizeTags, parse, saveId, textId, type ParsedLink } from "@postsaver/core";
+import { LIMITS, cleanCategoryName, cleanText, normalizeTags, parse, saveId, textId, type ParsedLink } from "@postsaver/core";
+import { BUILT_IN_INDEX, MAX_OWN_CATEGORIES, findCategory, type CategoryIndex } from "../data/categories.ts";
 import type { LibrarySave } from "../sync/library.ts";
 import type { ImportItem, ImportType, ParsedFile } from "./types.ts";
 
@@ -18,6 +19,8 @@ export interface Prepared {
   note?: string;
   /** Collection names; the importer turns them into ids. */
   collections: string[];
+  /** Its category, by name; the importer finds it, or makes it with this symbol. */
+  category?: { name: string; symbol?: string };
   /** A title from the file, kept only for ordinary web pages. */
   title?: string;
   favorite?: boolean;
@@ -49,6 +52,8 @@ export interface ImportPlan {
   missing: LibrarySave[];
   /** Every collection name the writes need. */
   collections: string[];
+  /** Categories the import will make, because the account has none by that name. */
+  categories: Array<{ name: string; symbol?: string }>;
 }
 
 /** New collections one import may create; folders beyond that are left out. */
@@ -70,6 +75,8 @@ export async function planImport(
   library: readonly LibrarySave[],
   /** Existing collections: id → name. */
   collectionNames: ReadonlyMap<string, string> = new Map(),
+  /** The account's categories. */
+  categories: CategoryIndex = BUILT_IN_INDEX,
 ): Promise<ImportPlan> {
   const existing = new Map(library.map((s) => [s.id, s]));
   const byId = new Map<string, { link: ParsedLink | null; text: string | null; item: ImportItem }>();
@@ -97,6 +104,7 @@ export async function planImport(
     merged.savedAt ??= item.savedAt;
     merged.note ??= item.note;
     merged.title ??= item.title;
+    merged.category ??= item.category;
     merged.favorite ||= item.favorite;
   }
 
@@ -119,6 +127,8 @@ export async function planImport(
     }
     const note = item.note?.trim().slice(0, LIMITS.note);
     const title = link?.platform === "web" ? item.title?.trim().slice(0, LIMITS.title) : undefined;
+    const categoryName = cleanCategoryName(item.category?.name ?? "");
+    const symbol = item.category?.symbol;
     add.push({
       id,
       url: item.url,
@@ -127,6 +137,7 @@ export async function planImport(
       tags,
       ...(note ? { note } : {}),
       collections,
+      ...(categoryName ? { category: { name: categoryName, ...(symbol && symbol.length <= LIMITS.emoji ? { symbol } : {}) } } : {}),
       ...(title ? { title } : {}),
       ...(item.favorite ? { favorite: true } : {}),
     });
@@ -142,12 +153,24 @@ export async function planImport(
   for (const p of [...add, ...update]) p.collections = p.collections.filter((c) => allowed.has(c.toLowerCase()));
   const collections = wanted.filter((n) => allowed.has(n.toLowerCase()));
 
+  // Categories the account doesn't have are made, as far as there's room; past that, the saves
+  // come in without one.
+  const newCategories = new Map<string, { name: string; symbol?: string }>();
+  let room = MAX_OWN_CATEGORIES - [...categories.values()].filter((c) => c.own).length;
+  for (const p of add) {
+    if (!p.category || findCategory(p.category.name, categories)) continue;
+    const key = p.category.name.toLowerCase();
+    if (newCategories.has(key)) continue;
+    if (room-- > 0) newCategories.set(key, p.category);
+    else delete p.category;
+  }
+
   const missing =
     parsed.type === "instagram" && byId.size > 0
       ? library.filter((s) => s.platform === "instagram" && s.source === "import-instagram" && s.status === "active" && !byId.has(s.id))
       : [];
 
-  return { type: parsed.type, add, update: update.filter((u) => u.tags.length || u.collections.length), already, invalid, repeated, missing, collections };
+  return { type: parsed.type, add, update: update.filter((u) => u.tags.length || u.collections.length), already, invalid, repeated, missing, collections, categories: [...newCategories.values()] };
 }
 
 // ---------- the daily limit (CLAUDE.md §6.11) ----------

@@ -29,7 +29,7 @@ import { forgetJobs } from "../import/jobs.ts";
 // Deleting an account (CLAUDE.md §6.4, §6.8): everything the account owns, then the account.
 // The profile is marked `deleting` first, which is what lets the rules accept deleting live
 // saves; if the page closes half-way, the mark is still there and the next visit carries on.
-// Order: saves → collections → imports → the profile → the sign-in itself.
+// Order: saves → collections and categories → imports → the profile → the sign-in itself.
 
 /** Documents removed per round trip (a batch takes at most 500 writes). */
 const BATCH = 300;
@@ -132,6 +132,7 @@ export async function deleteAccount(user: User, onProgress: (progress: DeletePro
   await wipe(savesOf(uid), stage("saves"));
   onProgress({ stage: "collections", removed });
   await wipe(collection(db, "users", uid, "collections"), stage("collections"));
+  await wipe(collection(db, "users", uid, "categories"), stage("collections"));
   onProgress({ stage: "imports", removed });
   await wipe(collection(db, "users", uid, "imports"), stage("imports"));
 

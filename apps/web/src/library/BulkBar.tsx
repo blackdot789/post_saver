@@ -5,6 +5,7 @@ interface BulkBarProps {
   inTrash: boolean;
   onFavorite: () => void;
   onTags: () => void;
+  onCategory: () => void;
   onCollections: () => void;
   onTrash: () => void;
   onRestore: () => void;
@@ -14,7 +15,7 @@ interface BulkBarProps {
 }
 
 /** Actions on the selected saves, pinned to the bottom of the screen. */
-export function BulkBar({ count, inTrash, onFavorite, onTags, onCollections, onTrash, onRestore, onDeleteForever, onSelectAll, onClear }: BulkBarProps) {
+export function BulkBar({ count, inTrash, onFavorite, onTags, onCategory, onCollections, onTrash, onRestore, onDeleteForever, onSelectAll, onClear }: BulkBarProps) {
   return (
     <div role="region" aria-label="Selected saves" className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur dark:border-white/10 dark:bg-night/95">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3">
@@ -38,6 +39,9 @@ export function BulkBar({ count, inTrash, onFavorite, onTags, onCollections, onT
             </Button>
             <Button variant="secondary" size="sm" onClick={onTags} disabled={count === 0}>
               Add tags
+            </Button>
+            <Button variant="secondary" size="sm" onClick={onCategory} disabled={count === 0}>
+              Set category
             </Button>
             <Button variant="secondary" size="sm" onClick={onCollections} disabled={count === 0}>
               Add to collection

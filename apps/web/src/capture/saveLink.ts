@@ -182,11 +182,13 @@ export async function savePending(uid: string): Promise<number> {
 export interface LiveSave {
   tags: string[];
   note: string;
+  /** The id of its category, if any. */
+  category?: string;
   /** Changes on this device the server hasn't confirmed yet. */
   pending: boolean;
 }
 
-/** Follows one save (tags, note, sync state). Returns the unsubscribe function. */
+/** Follows one save (tags, note, category, sync state). Returns the unsubscribe function. */
 export function watchSave(uid: string, id: string, onChange: (save: LiveSave | null) => void): () => void {
   return onSnapshot(
     saveRef(uid, id),
@@ -197,6 +199,7 @@ export function watchSave(uid: string, id: string, onChange: (save: LiveSave | n
       onChange({
         tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
         note: typeof data.note === "string" ? data.note : "",
+        ...(typeof data.category === "string" && data.category ? { category: data.category } : {}),
         pending: snap.metadata.hasPendingWrites,
       });
     },

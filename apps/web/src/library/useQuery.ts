@@ -27,6 +27,9 @@ export function useQuery(): [LibraryQuery, (patch: Partial<LibraryQuery>) => voi
         next.view = "all";
         delete next.collection;
       }
+      // One tab at a time: a platform or a category.
+      if (patch.platform) delete next.category;
+      if (patch.category) delete next.platform;
       history.replaceState(null, "", `${location.pathname}${queryToSearch(next)}`);
       return next;
     });

@@ -24,6 +24,8 @@ export interface ImportItem {
   note?: string;
   /** Names of the folders or collections it was in. */
   collections?: string[];
+  /** Its category (only this app's own export has one). */
+  category?: { name: string; symbol?: string };
   favorite?: boolean;
 }
 

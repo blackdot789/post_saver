@@ -4,6 +4,7 @@ import { useDeleting } from "../account/delete.ts";
 import { signOut } from "../auth/session.ts";
 import { savePending } from "../capture/saveLink.ts";
 import { watchAppConfig, type RemoteConfig } from "../data/appConfig.ts";
+import { useCategories, type Category } from "../data/categories.ts";
 import { watchCollections, type Collection } from "../data/collections.ts";
 import { deleteSave, hardDeleteSave, restoreSave, setEmbedStatus, setFavorite, trashSave } from "../data/edits.ts";
 import { clearLocalData } from "../data/firestore.ts";
@@ -26,6 +27,8 @@ import { DeleteAccountDialog, DeletionPending, ExportDialog, ImportBanner, Impor
 import {
   AddDialog,
   BulkTagsDialog,
+  CategoryDialog,
+  CategoryEditDialog,
   CollectionDialog,
   CollectionsDialog,
   ConfirmDialog,
@@ -34,7 +37,7 @@ import {
   SettingsDialog,
   TagsDialog,
 } from "./dialogs.tsx";
-import { applyQuery, platformsInUse, tagCounts, type Layout } from "./query.ts";
+import { applyQuery, categoriesInUse, platformsInUse, tagCounts, type Layout } from "./query.ts";
 import { Masonry } from "./Masonry.tsx";
 import { estimateCardHeight, SaveCard, type SaveActions } from "./SaveCard.tsx";
 import { useSearch } from "./search.ts";
@@ -59,6 +62,8 @@ type DialogState =
   | { kind: "delete-account" }
   | { kind: "tags"; save: LibrarySave }
   | { kind: "note"; save: LibrarySave }
+  | { kind: "category"; saves: LibrarySave[] }
+  | { kind: "edit-category"; category?: Category }
   | { kind: "collections"; saves: LibrarySave[] }
   | { kind: "bulk-tags"; ids: string[] }
   | { kind: "new-collection" }
@@ -96,6 +101,7 @@ export function LibraryPage({ user }: { user: User }) {
   const uid = user.uid;
   const library = useLibrary(uid);
   const collections = useCollections(uid);
+  const categories = useCategories(uid);
   const remoteConfig = useAppConfig();
   const config = remoteConfig ?? NO_CONFIG;
   const [settings, updateSettings] = useSettings(uid);
@@ -108,7 +114,7 @@ export function LibraryPage({ user }: { user: User }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const theme = useResolvedTheme(settings.theme);
   useEnrichment(uid, library);
-  const importing = useImport(uid, library, collections, remoteConfig);
+  const importing = useImport(uid, library, collections, categories, remoteConfig);
   const deleting = useDeleting(uid);
 
   useEffect(() => applyTheme(settings.theme), [settings.theme]);
@@ -125,10 +131,11 @@ export function LibraryPage({ user }: { user: User }) {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const search = useSearch(library.saves);
-  const shown = useMemo(() => applyQuery(library.saves, query, search(query.q)), [library.saves, query, search]);
+  const search = useSearch(library.saves, categories);
+  const shown = useMemo(() => applyQuery(library.saves, query, categories, search(query.q)), [library.saves, query, categories, search]);
   const tags = useMemo(() => tagCounts(library.saves), [library.saves]);
-  const platforms = useMemo(() => platformsInUse(library.saves), [library.saves]);
+  const platforms = useMemo(() => platformsInUse(library.saves, categories), [library.saves, categories]);
+  const categoryTabs = useMemo(() => categoriesInUse(library.saves, categories), [library.saves, categories]);
   const collectionNames = useMemo(() => new Map(collections.map((c) => [c.id, c.name])), [collections]);
   const counts = useMemo(
     () => ({
@@ -163,6 +170,7 @@ export function LibraryPage({ user }: { user: User }) {
     favorite: (s) => setFavorite(uid, s.id, !s.favorite).catch(fail),
     tags: (s) => setDialog({ kind: "tags", save: s }),
     note: (s) => setDialog({ kind: "note", save: s }),
+    category: (s) => setDialog({ kind: "category", saves: [s] }),
     collections: (s) => setDialog({ kind: "collections", saves: [s] }),
     copyLink: (s) => {
       navigator.clipboard?.writeText(s.url).then(() => setToast("Link copied"), () => setToast("Couldn't copy the link"));
@@ -258,6 +266,7 @@ export function LibraryPage({ user }: { user: User }) {
       previews={cardPreviews}
       disabledPlatforms={disabledPlatforms}
       collectionNames={collectionNames}
+      categories={categories}
       actions={actions}
       selecting={selecting}
       selected={selected.has(save.id)}
@@ -344,6 +353,9 @@ export function LibraryPage({ user }: { user: User }) {
             query={query}
             onQuery={setQuery}
             platforms={platforms}
+            categories={categoryTabs}
+            onNewCategory={() => setDialog({ kind: "edit-category" })}
+            onEditCategory={(category) => setDialog({ kind: "edit-category", category })}
             layout={layout}
             onLayout={(view) => updateSettings({ view })}
             selecting={selecting}
@@ -385,6 +397,7 @@ export function LibraryPage({ user }: { user: User }) {
           inTrash={inTrash}
           onFavorite={bulk.favorite}
           onTags={() => setDialog({ kind: "bulk-tags", ids: selectedSaves.map((s) => s.id) })}
+          onCategory={() => setDialog({ kind: "category", saves: selectedSaves })}
           onCollections={() => setDialog({ kind: "collections", saves: selectedSaves })}
           onTrash={bulk.trash}
           onRestore={bulk.restore}
@@ -417,13 +430,14 @@ export function LibraryPage({ user }: { user: User }) {
         <ImportDialog
           saves={library.saves}
           collections={collections}
+          categories={categories}
           controls={importing}
           onUnsave={settings.onUnsave ?? "keep"}
           onChooseUnsave={(onUnsave) => updateSettings({ onUnsave })}
           onClose={() => setDialog({ kind: "none" })}
         />
       )}
-      {dialog.kind === "export" && <ExportDialog saves={library.saves} collections={collections} synced={library.status === "synced"} onClose={() => setDialog({ kind: "none" })} />}
+      {dialog.kind === "export" && <ExportDialog saves={library.saves} collections={collections} categories={categories} synced={library.status === "synced"} onClose={() => setDialog({ kind: "none" })} />}
       {dialog.kind === "delete-account" && (
         <DeleteAccountDialog
           user={user}
@@ -435,6 +449,19 @@ export function LibraryPage({ user }: { user: User }) {
       )}
       {dialog.kind === "tags" && <TagsDialog uid={uid} save={library.saves.find((s) => s.id === dialog.save.id) ?? dialog.save} onClose={() => setDialog({ kind: "none" })} />}
       {dialog.kind === "note" && <NoteDialog uid={uid} save={library.saves.find((s) => s.id === dialog.save.id) ?? dialog.save} onClose={() => setDialog({ kind: "none" })} />}
+      {dialog.kind === "category" && (
+        <CategoryDialog uid={uid} saves={dialog.saves.map((d) => library.saves.find((s) => s.id === d.id) ?? d)} categories={categories} onClose={() => setDialog({ kind: "none" })} />
+      )}
+      {dialog.kind === "edit-category" && (
+        <CategoryEditDialog
+          uid={uid}
+          category={dialog.category}
+          categories={categories}
+          // Its tab goes with it.
+          onGone={() => setQuery({ category: undefined })}
+          onClose={() => setDialog({ kind: "none" })}
+        />
+      )}
       {dialog.kind === "collections" && (
         <CollectionsDialog
           uid={uid}

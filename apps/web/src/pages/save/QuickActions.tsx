@@ -1,7 +1,9 @@
 import { useId, useState, type FormEvent } from "react";
 import { LIMITS, normalizeTags } from "@postsaver/core";
-import { addTags, removeTag, setNote } from "../../data/edits.ts";
+import { useCategories } from "../../data/categories.ts";
+import { addTags, removeTag, setCategory, setNote } from "../../data/edits.ts";
 import { useLiveSave } from "../../capture/useSave.ts";
+import { CategoryPicker } from "../../library/CategoryPicker.tsx";
 import { errorMessage } from "./messages.ts";
 import { Alert } from "../../ui/Alert.tsx";
 import { Button } from "../../ui/Button.tsx";
@@ -107,15 +109,21 @@ export function NoteEditor({ uid, id, note, fail }: { uid: string; id: string; n
   );
 }
 
-/** Tags and a note, right after saving. Collections join here with the library (step 7). */
+/** A category, tags and a note, right after saving. */
 export function QuickActions({ uid, id }: { uid: string; id: string }) {
   const save = useLiveSave(uid, id);
+  // This device's copy of the owner's categories: no server read while saving (the library keeps it current).
+  const categories = useCategories(uid, "cache");
   const [error, setError] = useState<string | null>(null);
   if (!save) return null;
   const fail = (e: unknown) => setError(errorMessage(e));
   return (
     <div className="mt-6 space-y-5 border-t border-slate-200 pt-5 dark:border-white/10">
       {error && <Alert tone="error">{error}</Alert>}
+      <div>
+        <p className="mb-1.5 text-sm font-medium">Category</p>
+        <CategoryPicker uid={uid} categories={categories} value={save.category} onChoose={(category) => setCategory(uid, id, category).catch(fail)} />
+      </div>
       <TagEditor uid={uid} id={id} tags={save.tags} fail={fail} />
       <NoteEditor uid={uid} id={id} note={save.note} fail={fail} />
     </div>
