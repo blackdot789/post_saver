@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="383.5 216 468 468" role="img" aria-label="logo">
+  <defs>
+    <radialGradient id="ck-top" gradientUnits="userSpaceOnUse" cx="450" cy="305" r="290">
+      <stop offset="0" stop-color="#00D4FF"/>
+      <stop offset="0.19" stop-color="#00CAFE"/>
+      <stop offset="0.38" stop-color="#00A5FE"/>
+      <stop offset="0.59" stop-color="#0088FD"/>
+      <stop offset="0.79" stop-color="#006DFB"/>
+      <stop offset="0.93" stop-color="#0A58FD"/>
+      <stop offset="1" stop-color="#0F52FC"/>
+    </radialGradient>
+    <linearGradient id="ck-body" gradientUnits="userSpaceOnUse" x1="440" y1="420" x2="560" y2="625">
+      <stop offset="0" stop-color="#0A62FD"/>
+      <stop offset="0.2" stop-color="#1A5AFD"/>
+      <stop offset="0.35" stop-color="#3A52FD"/>
+      <stop offset="0.5" stop-color="#4A42FB"/>
+      <stop offset="0.65" stop-color="#5C3BFC"/>
+      <stop offset="0.8" stop-color="#7841FD"/>
+      <stop offset="0.92" stop-color="#974BFC"/>
+      <stop offset="1" stop-color="#994DFB"/>
+    </linearGradient>
+    <linearGradient id="ck-arm" gradientUnits="userSpaceOnUse" x1="515" y1="600" x2="715" y2="560">
+      <stop offset="0" stop-color="#262CF6"/>
+      <stop offset="0.2" stop-color="#2F30F6"/>
+      <stop offset="0.42" stop-color="#443EFB"/>
+      <stop offset="0.68" stop-color="#4E55FD"/>
+      <stop offset="1" stop-color="#4966FC"/>
+    </linearGradient>
+    <linearGradient id="ck-bookmark" gradientUnits="userSpaceOnUse" x1="695" y1="383" x2="625" y2="515">
+      <stop offset="0" stop-color="#F53FBE"/>
+      <stop offset="0.2" stop-color="#C63FD5"/>
+      <stop offset="0.4" stop-color="#A538E3"/>
+      <stop offset="0.6" stop-color="#8C2FEB"/>
+      <stop offset="0.8" stop-color="#6B2CF3"/>
+      <stop offset="1" stop-color="#5428F9"/>
+    </linearGradient>
+    <linearGradient id="ck-card-1" gradientUnits="userSpaceOnUse" x1="735" y1="383" x2="775" y2="529">
+      <stop offset="0" stop-color="#0477F9"/>
+      <stop offset="1" stop-color="#02A2FD"/>
+    </linearGradient>
+    <linearGradient id="ck-card-2" gradientUnits="userSpaceOnUse" x1="800" y1="383" x2="840" y2="529">
+      <stop offset="0" stop-color="#7965FB"/>
+      <stop offset="1" stop-color="#A862FB"/>
+    </linearGradient>
+    <clipPath id="ck-c">
+      <path d="M531 272H655A86 86 0 0 1 735.83 328.62A26 26 0 0 1 711.39 363.5H571A72 72 0 0 0 499 435.5V464.5A72 72 0 0 0 571 536.5H711.39A26 26 0 0 1 735.83 571.38A86 86 0 0 1 655 628H531A145 145 0 0 1 386 483V417A145 145 0 0 1 531 272Z"/>
+    </clipPath>
+  </defs>
+  <path fill="url(#ck-top)" d="M531 272H655A86 86 0 0 1 735.83 328.62A26 26 0 0 1 711.39 363.5H571A72 72 0 0 0 499 435.5V464.5A72 72 0 0 0 571 536.5H711.39A26 26 0 0 1 735.83 571.38A86 86 0 0 1 655 628H531A145 145 0 0 1 386 483V417A145 145 0 0 1 531 272Z"/>
+  <g clip-path="url(#ck-c)">
+    <path fill="url(#ck-body)" d="M380 486H386C400 420 470 366 535 363.5L575 364V480L503 498C520 545 580 620 642 628V640H380Z"/>
+    <path fill="url(#ck-arm)" d="M503 498C520 545 580 620 642 628V640H760V500Z"/>
+  </g>
+  <path fill="url(#ck-bookmark)" d="M600 383H686Q695 383 695 392V509Q695 521 685.9 513.2L647.5 479.9Q643 476 638.5 479.9L600.1 513.2Q591 521 591 509V392Q591 383 600 383Z"/>
+  <path fill="url(#ck-card-1)" d="M722 383H757A30 30 0 0 1 787 413V499A30 30 0 0 1 757 529H722Q738 520 740 496V416Q738 392 722 383Z"/>
+  <path fill="url(#ck-card-2)" d="M785 383H819A30 30 0 0 1 849 413V499A30 30 0 0 1 819 529H785Q801 520 803 496V416Q801 392 785 383Z"/>
+</svg>

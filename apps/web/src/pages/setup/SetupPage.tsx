@@ -75,7 +75,7 @@ function ShareDemo() {
         Tap Share
       </li>
       <li className={cx(tile, "[animation-delay:2s]")}>
-        <img src="/icons/mark.svg" alt="" width="24" height="24" className="size-6" />
+        <img src="/favicon.svg" alt="" width="24" height="24" className="size-6" />
         Pick {brand}
       </li>
       <li className={cx(tile, "[animation-delay:4s]")}>
@@ -192,7 +192,7 @@ function BookmarkButton() {
           }}
           className="inline-flex cursor-grab items-center gap-2 rounded-lg bg-linear-to-r from-brand-from to-brand-to px-3.5 py-2 font-medium text-white shadow-sm active:cursor-grabbing"
         >
-          <img src="/icons/mark.svg" alt="" width="18" height="18" className="size-4.5 rounded-sm bg-white/90 p-0.5" />
+          <img src="/favicon.svg" alt="" width="18" height="18" className="size-4.5 rounded-sm bg-white/90 p-0.5" />
           Save to {brand}
         </a>
       </p>

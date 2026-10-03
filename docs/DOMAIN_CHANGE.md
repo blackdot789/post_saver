@@ -5,8 +5,10 @@ checklist of console steps that only a person can do.
 
 ## 1. Code (developer)
 
-1. Edit `domain` (and `brand` if renaming) in `site.config.ts`. Replace files in `brand/` if the
-   logo changes, then run `pnpm brand`.
+1. Edit `domain` in `site.config.ts`. To change the name and logo too, set `activeBrand` there to
+   another entry of `brands` (one line; nothing to regenerate). A brand that isn't listed yet needs
+   a block in `brands` and a folder `brand/<key>/` with `logo-full.png`, `mark.svg` and
+   `mark-small.svg`; then run `pnpm brand` and commit what it writes.
 2. `pnpm verify` — must pass (`check:domains` confirms nothing else hardcodes the old values).
 3. Merge to `main` — the deploy workflow rebuilds the site and embed sandbox for the new domain.
 4. `pnpm domain:apply` — points both GitHub Pages sites at the new hostnames and enforces HTTPS
@@ -21,7 +23,8 @@ checklist of console steps that only a person can do.
 | Firebase → Hosting | Add custom domain `auth.<new-domain>` and add the DNS records it shows |
 | Firebase → Authentication → Settings → Authorized domains | Add `<new-domain>`, `www.<new-domain>`, `auth.<new-domain>` |
 | Google Cloud → Google Auth Platform → Clients → Web client | Add redirect URI `https://auth.<new-domain>/__/auth/handler` |
-| Google Cloud → Google Auth Platform → Branding | Update authorized domain, privacy and terms links |
+| Google Cloud → Google Auth Platform → Branding | Update authorized domain, privacy and terms links (and the app name, if the brand changed) |
+| Firebase → Project settings → General → Public-facing name | If the brand changed: the name used in verification and password-reset emails |
 | Old domain's registrar | Forward the old domain to the new one for ~90 days |
 
 ## 3. What users notice

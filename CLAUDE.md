@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This file is the **single source of truth for the whole project**: product, decisions, the full plan, live infrastructure, status and how to work with the owner. Read it fully before doing anything, and **update §12 (progress log) and the roadmap checkboxes (§9) whenever work lands**. Also update the **"📍 Progress tracker"** at the top of `.claude/PROJECT_PLAN.md` (the step table, the progress bar, "Where we are" and the owner's to-do list). The owner reads that tracker to see what's done and what's left. It's git-ignored and exists only on the owner's Mac; skip it if it's missing.
 
-> **Naming rule for this file and every other tracked file.** `pnpm check:domains` fails CI if the domain or brand name appears literally anywhere except `site.config.ts` and `brand/`. So docs say **`<domain>`** for the main domain and **"the brand"** for the product name. The **current values are in `site.config.ts`**: `domain` (a *temporary test domain* registered at Hostinger) and `brand.name`. The tagline is "Save Posts Across All Platforms". Repo and project names use `post_saver` / `post-saver`, which the check allows.
+> **Naming rule for this file and every other tracked file.** `pnpm check:domains` fails CI if the domain or any brand's name appears literally anywhere except `site.config.ts` and `brand/`. So docs say **`<domain>`** for the main domain, **"the brand"** for the product name and **`brand/<key>/`** for a brand's folder. The **current values are in `site.config.ts`**: `domain` (a *temporary test domain* registered at Hostinger) and the brand that the one line **`activeBrand`** picks from `brands` (name, tagline, colours, logo). Repo and project names use `post_saver` / `post-saver`, which the check allows.
 
 ---
 
@@ -27,6 +27,7 @@ This file is the **single source of truth for the whole project**: product, deci
   - **Phase 1, step 9 (install, offline pages, the bookmarklet, `/setup/`) is done (2026-09-30):** a service worker keeps the app's pages on the device, so a post can be shared to the installed app without a connection; `/setup/` walks through installing on Android (or the Save bookmark on a computer) and ends with a live test. 101 web unit tests, 56 browser tests. No rules change. **The owner still has to try it on the OnePlus** (§10).
   - **Phase 1, step 10 (import, export, delete account) is done (2026-09-30):** Settings → "Your data" imports browser bookmarks, CSV (Dewey's too), Instagram's export (with its collections, and spotting posts unsaved since the last import) and this app's own JSON; at most 500 posts a day, resuming by itself. Export as JSON, CSV or a bookmarks file. "Delete account" removes everything on the server and the device. 125 web unit tests, 64 browser tests. No rules change.
   - **Saved text (2026-10-01), an extra the owner asked for before step 11:** a text typed, pasted or shared on one device shows up in the library on the others, with a Copy button (§6.1 "As built: saved text"). It's a save like a post (same sync, search, tags, collections, Trash, export, import). 932 core tests, 165 rules tests, 147 web unit tests, 71 browser tests. The rules changed: the owner deployed them to both projects (verified identical to the repo), then it was pushed (`0f1c430`) and is live. **The owner's own test on the OnePlus and the laptop is pending** (§10).
+  - **The name and logo are one line (2026-10-03):** `site.config.ts` lists the brands to choose from (`brands`) and `activeBrand` picks one; the name, tagline, colours, icons and social image all follow, with nothing to regenerate (§4.1). The owner's new name and logo are the active brand **for now: the owner is still deciding** on the name; the first brand stays in the list. 147 web unit tests, 71 browser tests. No rules change.
   - **Next, in this order (the owner's decision, 2026-10-01):** (1) the owner's second extra, **downloading a post's media from its link**, which conflicts with decisions in §2 and §6.8 and has to be talked through first (§10 "Open question"); (2) **Phase 1, step 11: PWA polish (update prompt), accessibility, performance budgets, the full landing page, SEO** (§9).
 - **The original plan file**, `~/.claude/plans/make-a-full-proof-vivid-rose.md`, exists only on the owner's Mac and is superseded by this file. Its local copy `.claude/PROJECT_PLAN.md` (git-ignored) carries the owner's progress tracker at the top; keep it current (see above).
 
@@ -44,7 +45,7 @@ This file is the **single source of truth for the whole project**: product, deci
 
 | Topic | Decision |
 |---|---|
-| Domain & brand | **Only in `site.config.ts`**. Everything else derives from it; CI enforces this (§4) |
+| Domain & brand | **Only in `site.config.ts`**. Everything else derives from it; CI enforces this (§4). The brand (name + logo) is picked by one line, `activeBrand`. **The name isn't final:** the owner put a new one in on 2026-10-03 and is still deciding |
 | Main site | GitHub Pages of public repo **`post_saver`** → `<domain>` (`www.<domain>` redirects to it) |
 | Embed sandbox | Public repo **`post_saver_embed`** → `embed.<domain>`. **All platform embed code runs only here**, never on the main origin |
 | Private ops | Private repo **`post_saver_ops`**: backups and admin jobs (empty so far) |
@@ -58,7 +59,7 @@ This file is the **single source of truth for the whole project**: product, deci
 | Sign-in | Google + email/password, **email verification required before cloud sync**. **Never email-link sign-in** (5/day limit on Spark). Apple sign-in is deferred ($99/yr) |
 | Phone capture | **v1: Android** installed PWA share target. **iPhone: v1.2**, an Apple Shortcut with a save key, once an iPhone is available. The data model supports it from day 1 |
 | Accounts | GitHub **`blackdot789`** · Google/Firebase/Cloudflare owner **`kerdostack@gmail.com`**, which is also the support email during testing |
-| Brand assets | Owner's logo `brand/logo-full.png`; vector redraws `brand/mark.svg` (P + sparks) and `brand/mark-p.svg` (P only). Colors sampled from the logo: `#099AFE` → `#6636F2` gradient, ink `#03112C` |
+| Brand assets | One folder per brand, `brand/<key>/`: the owner's logo `logo-full.png`, Claude's vector redraws `mark.svg` (the full mark) and `mark-small.svg` (simplified, for small sizes), and the generated `public/`. Each brand's colours (gradient ends + ink, sampled from its logo) are in `brands` in `site.config.ts` |
 | Unavoidable costs | The domain, and the Chrome Web Store $5 one-time fee (v1.1) |
 | Blaze decision | Stay on Spark through development and beta. **Before public launch**, decide whether to move to Blaze with a $5 budget alert. It has the same free allowance, and going over costs cents instead of an outage |
 | Domain switch | **Switch to the final domain before the public launch**, because users must re-login and reinstall after an origin change (§10) |
@@ -81,7 +82,7 @@ pnpm test                                  # Vitest in every package that has a 
 pnpm test:rules                            # Firestore rules tests: starts the emulator (Java 21), runs firebase/test
 pnpm test:e2e                              # browser tests: builds apps/web --mode e2e, starts the Auth + Firestore emulators, runs Playwright (system Chrome)
 pnpm --filter @postsaver/core exec vitest  # URL engine tests in watch mode
-pnpm brand                                 # regenerate icons + OG image from brand/ (outputs committed)
+pnpm brand                                 # regenerate every brand's icons + OG image into brand/<key>/public/ (outputs committed)
 pnpm exec tsx scripts/config-get.ts hosts.embed   # print one config value (CI uses this)
 pnpm domain:apply                          # set both GitHub Pages custom domains, then enforce HTTPS
 pnpm --filter @postsaver/resolver dev      # Worker locally (wrangler)
@@ -105,7 +106,7 @@ cd firebase && firebase emulators:start    # Auth 9099, Firestore 8080, UI 4000 
 ## 4. Codebase architecture (as built)
 
 ```
-site.config.ts        the ONLY place for domain, brand, contacts, GitHub repos, Worker URL, Firebase web configs
+site.config.ts        the ONLY place for domain, brands (+ the one line that picks one), contacts, GitHub repos, Worker URL, Firebase web configs
 packages/config/      typed access: index.ts (hosts/origins/firebaseConfig), html.ts (%TOKENS%, CSP), vite-plugin.ts
 packages/core/        URL engine: parse(), extractSharedUrl()/findUrls(), saveId(); fixture tests (Vitest)
 apps/web/             main site: static landing + 404, React pages /login/, /app/, /save/, /share/, /setup/ (src/{auth,account,capture,data,sync,enrich,import,export,embeds-host,library,lib,ui,pages})
@@ -113,7 +114,7 @@ apps/embed/           embed sandbox: validates the #fragment, renders with each 
 workers/resolver/     Cloudflare Worker: /health, /resolve, /meta, /batch (short links, titles), config-driven CORS
 firebase/             firebase.json, .firebaserc (dev/prod aliases), firestore.rules + test/ (rules tests), indexes, hosting/
 scripts/              check-domains, config-get, domain-apply, gen-brand (sharp)
-brand/                logo sources; apps/web/public/{favicon.svg,icons/*,og.png} are generated by `pnpm brand`
+brand/                one folder per brand: logo sources + public/ (favicon.svg, icons/*, og.png, generated by `pnpm brand`); the web app serves the active brand's public/
 docs/                 SETUP.md (accounts/tools/secrets), DOMAIN_CHANGE.md (runbook)
 .github/workflows/    ci.yml, deploy.yml (actions pinned by commit SHA; keep it that way)
 tests/e2e/            Playwright browser tests against the Firebase emulators
@@ -123,9 +124,10 @@ tests/e2e/            Playwright browser tests against the Firebase emulators
 - **`packages/config/src/index.ts`**
   - Derives `hosts` and `origins` (app, www, embed, auth) from `site.domain` + `site.subdomains`.
   - `firebaseConfig(env)` sets `authDomain` = `auth.<domain>` for **prod** and `<projectId>.firebaseapp.com` for **dev**.
-  - `forbiddenLiterals()` feeds `check:domains`.
+  - `forbiddenLiterals()` feeds `check:domains`: the domain and the name of **every** brand in `brands`, so a switch never leaves a name behind.
+- **The brand switch.** `activeBrand` in `site.config.ts` is the only line to change. `site.brand` is that entry of `brands` plus its `key`; names and colours reach the pages through the tokens and `brand.css` below, and the images through Vite's `publicDir`, which `apps/web/vite.config.ts` points at `brand/<key>/public/`. Those images are made ahead for every brand by `pnpm brand` and committed, so a switch needs no image tools: edit the line, push.
 - **`packages/config/src/html.ts`**
-  - `%TOKEN%` values for HTML: `BRAND_NAME`, `BRAND_NAME_FIRST`/`BRAND_NAME_LAST` (the landing styles the last word with the gradient), `BRAND_TAGLINE`, `BRAND_DESCRIPTION`, `THEME_COLOR`, `APP_ORIGIN`, `APP_HOST`, `EMBED_ORIGIN`, `SUPPORT_EMAIL`, `YEAR`. An unknown token throws at build time.
+  - `%TOKEN%` values for HTML: `BRAND_NAME`, `BRAND_NAME_FIRST`/`BRAND_NAME_LAST` (the name without its `accent`, and the accent, which the landing draws in the gradient like the logo does; the build fails if the name doesn't end with its accent), `BRAND_TAGLINE`, `BRAND_DESCRIPTION`, `THEME_COLOR`, `APP_ORIGIN`, `APP_HOST`, `EMBED_ORIGIN`, `SUPPORT_EMAIL`, `YEAR`. An unknown token throws at build time.
   - `mainSiteCsp({ emulators? })` builds the main-site CSP. **Add every new third-party origin here.** Now allowed: `script-src https://apis.google.com` (Firebase Auth's popup/redirect helper), `connect-src` identitytoolkit + securetoken + firestore.googleapis.com + the resolver Worker's origin (`site.apiBaseUrl`) + `https://public.api.bsky.app` (Bluesky handle → DID), `img-src https://www.google.com` (Firestore's WebChannel loads a 1×1 `cleardot.gif` from there when the connection drops, to tell offline from server-down; blocking it only logs CSP errors), `frame-src` embed + auth origins. `emulators: true` (only for `--mode e2e` builds) adds `http://127.0.0.1:9099` and `:8080`; `embedOrigin` replaces embed.<domain> in `frame-src` (e2e builds use the local embed preview server, `VITE_EMBED_ORIGIN`), and `apiBaseUrl` replaces the Worker's origin (e2e builds: `VITE_API_BASE_URL`, an address nothing listens on, answered by the tests).
 - **`packages/config/src/vite-plugin.ts`** (`siteConfigPlugin`), used by both apps:
   - Replaces tokens.
@@ -171,7 +173,7 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 
 | File | Purpose / key contents |
 |---|---|
-| `site.config.ts` | `export const site = {…} as const` + `interface FirebaseWebConfig`. Fields: `brand{name, shortName, tagline, description, colors{from,to,ink}}`, `domain`, `subdomains{www,embed,auth}`, `apiBaseUrl`, `contact{support,privacy}`, `github{owner, repos{web,embed,ops}}`, `firebase{dev,prod}` (apiKey, projectId, appId, messagingSenderId) |
+| `site.config.ts` | **`activeBrand`** (the one line that picks the name and logo), `brands` (per key: `name`, `accent`, `shortName`, `tagline`, `description`, `colors{from,to,ink}`), `export const site = {…} as const`, `interface Brand`, `interface FirebaseWebConfig`. Fields of `site`: `brand` (the active entry of `brands` + its `key`, which is its folder in `brand/`), `domain`, `subdomains{www,embed,auth}`, `apiBaseUrl`, `contact{support,privacy}`, `github{owner, repos{web,embed,ops}}`, `firebase{dev,prod}` (apiKey, projectId, appId, messagingSenderId) |
 | `package.json` | `packageManager: pnpm@12.6.0`, `engines.node >=22.18`. Scripts: `dev`, `build`, `typecheck`, `test` (`pnpm -r run test`), `test:rules`, `test:e2e`, `check:domains`, `brand`, `config:get`, `domain:apply`, `verify`. devDeps: typescript ^7.0.2, tsx ^4.23, sharp ^0.35.4, @types/node ^26, `@postsaver/config` |
 | `pnpm-workspace.yaml` | `packages: apps/*, packages/*, workers/*, firebase, tests/*`; `allowBuilds`: esbuild and workerd true; `@firebase/util`, protobufjs and re2 false |
 | `tsconfig.base.json` | ES2022, `moduleResolution: Bundler`, `strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`, `allowImportingTsExtensions`, `noEmit`. Every package's `tsconfig.json` extends it |
@@ -186,7 +188,7 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 
 | File | Exports |
 |---|---|
-| `src/index.ts` | `site`, `type FirebaseWebConfig`, `type HostKey` (`"app" \| "www" \| "embed" \| "auth"`), `host(key)`, `origin(key)`, `hosts`, `origins`, `type FirebaseEnv`, `firebaseConfig(env)` (adds `authDomain`), `forbiddenLiterals()` (returns `[domain, brand.name]`) |
+| `src/index.ts` | `site`, `brands`, `type Brand`, `type FirebaseWebConfig`, `type HostKey` (`"app" \| "www" \| "embed" \| "auth"`), `host(key)`, `origin(key)`, `hosts`, `origins`, `type FirebaseEnv`, `firebaseConfig(env)` (adds `authDomain`), `forbiddenLiterals()` (returns the domain and every brand's name) |
 | `src/html.ts` | `htmlTokens()` (token → value map; HTML-escaped on apply), `applyHtmlTokens(html, tokens?)` (replaces `%[A-Z_]+%`, throws on unknown), `mainSiteCsp({emulators?})` (a directive map: `default/style/font-src 'self'`; `script-src 'self' https://apis.google.com`; `img-src 'self' data:`; `connect-src 'self'` + identitytoolkit + securetoken (+ emulators); `frame-src` embed + auth origins; `object-src 'none'`; `base-uri`/`form-action 'self'`) |
 | `src/vite-plugin.ts` | `siteConfigPlugin({ csp?, brandCssPath?, files?, serviceWorker? })`. It uses `configResolved` (writes brand.css only when changed), `transformIndexHtml` (order `pre`, tokens + CSP meta when `!ctx.server`), `generateBundle` (emits `files()` as assets) and `closeBundle` (`buildServiceWorker(outDir, {template, pages, keep})` → `sw.js`; throws when a listed page isn't in the build) |
 
@@ -213,7 +215,7 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 
 | File | Purpose |
 |---|---|
-| `vite.config.ts` | `defineConfig(({mode}) => …)`. Plugins `siteConfigPlugin` (csp = `mainSiteCsp({ emulators: mode === "e2e" })`, brandCssPath = `src/generated/brand.css`, files = robots.txt (disallows /app/, /login/, /save/, /share/) / sitemap.xml / manifest.webmanifest), `react()` and `tailwindcss()`. `build.rollupOptions.input = { index, notFound: 404.html, login, app, save, share, setup }`; **add each new route here**, and to `APP_PAGES` (robots.txt disallows them; the service worker keeps them). The manifest has `id: "/"` (fixed app identity), `start_url: "/app/"`, the Android **`share_target`** (GET `/share/` with `title`, `text`, `url`) and two `shortcuts` (Save a link, Library) |
+| `vite.config.ts` | `defineConfig(({mode}) => …)`. Plugins `siteConfigPlugin` (csp = `mainSiteCsp({ emulators: mode === "e2e" })`, brandCssPath = `src/generated/brand.css`, files = robots.txt (disallows /app/, /login/, /save/, /share/) / sitemap.xml / manifest.webmanifest), `react()` and `tailwindcss()`. `build.rollupOptions.input = { index, notFound: 404.html, login, app, save, share, setup }`; **add each new route here**, and to `APP_PAGES` (robots.txt disallows them; the service worker keeps them). **`publicDir` is `brand/<site.brand.key>/public`**: the app has no `public/` folder of its own, its static files are the active brand's images. The manifest has `id: "/"` (fixed app identity), `start_url: "/app/"`, the Android **`share_target`** (GET `/share/` with `title`, `text`, `url`) and two `shortcuts` (Save a link, Library) |
 | `login/` · `app/` · `save/` · `share/` · `setup/` `index.html` | Entry pages (noindex, favicons, manifest, styles.css, `<div id="root">`, a `<noscript>` note) loading `src/pages/{login,app,save,share,setup}/main.tsx`; each registers the service worker |
 | `sw.template.js` | **The service worker** (§6.1 "As built: step 9"), plain JS with the placeholders `__VERSION__`, `__FILES__`, `__PAGES__` filled in at build time. Pages: the network if it answers within 3 s, else the kept copy. Hashed assets, icons, the manifest: the kept copy first. Everything else (the landing page, other origins) untouched. No `skipWaiting`: a new version takes over when the old one's tabs are closed |
 | `.env.e2e` | `VITE_FIREBASE_ENV=demo`, `VITE_EMULATORS=1`, `VITE_EMBED_ORIGIN=http://localhost:4174`, `VITE_API_BASE_URL=http://127.0.0.1:8788` (the Worker's stand-in: nothing listens there, the tests answer), for `--mode e2e` builds (committed, no secrets) |
@@ -288,7 +290,7 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 | `src/pages/setup/` | `SetupPage` (`/setup/`, signed-in only; a device switch Android / iPhone / Computer kept in `?device=`): **Android**: 1 install (the button when Chrome offers it, the ⋮ menu otherwise, "Open in Chrome" inside an in-app browser, "Installed" afterwards), 2 share a post (three small animated pictures), 3 the live test · **Computer**: 1 the draggable "Save to …" bookmark (its `javascript:` address is set on the element, because React refuses such links; clicking it there only explains; "Copy the bookmark's address" for people who can't drag), 2 click it on a post, 3 the live test, plus an optional Install button · **iPhone**: "coming soon", copy link + paste. `useNewSave(uid)`: the live test, one listener on the newest save (`orderBy createdAt desc, limit 1`), starting from the server's first answer |
 | `src/pages/save/SaveResult.tsx` `compact` | Inside the library's Add dialog: no Open library / Done buttons |
 | `src/generated/brand.css` | **Generated, git-ignored**: `:root{--brand-from;--brand-to;--brand-ink}` |
-| `public/favicon.svg`, `public/icons/{favicon-32,apple-touch-icon,icon-192,icon-512,maskable-512}.png`, `public/icons/mark.svg`, `public/og.png` | **Generated by `pnpm brand`, committed**. Don't hand-edit |
+| `/favicon.svg` (the small mark; pages also draw it wherever the mark is under about 40 px), `/icons/{favicon-32,apple-touch-icon,icon-192,icon-512,maskable-512}.png`, `/icons/mark.svg` (the full mark: landing, 404), `/og.png` | Not in `apps/web`: they come from `brand/<active key>/public/`. **Generated by `pnpm brand`, committed**. Don't hand-edit. Pages give the marks a square box (every brand's mark has a square viewBox) |
 | `tsconfig.json` | `jsx: react-jsx`, types `vite/client` + `node`; includes `src`, `vite.config.ts`, `vitest.config.ts` |
 
 **`tests/e2e/`**: `@postsaver/e2e`, Playwright browser tests. devDeps: @playwright/test ^1.63, firebase-tools ^15.31, @types/node, `@postsaver/core` (to seed documents exactly as the app writes them).
@@ -357,15 +359,21 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 | `check-domains.ts` | Lists files with `git ls-files --cached --others --exclude-standard`. Skips `site.config.ts`, `brand/`, `pnpm-lock.yaml` and binaries. Case-insensitive search for `forbiddenLiterals()`; prints `file:line` and exits 1 |
 | `config-get.ts` | `tsx scripts/config-get.ts <dotted.path>` over `{...site, hosts, origins}`. Prints strings raw, objects as JSON |
 | `domain-apply.ts` | `gh api -X PUT repos/<owner>/<repo>/pages -f cname=…` for the web and embed repos; prints the manual console checklist; tries `https_enforced=true` on both |
-| `gen-brand.ts` | sharp. `squareIcon(svg, size, scale, bg)` renders into `apps/web/public`: favicon.svg + favicon-32 from `mark-p.svg`; apple-touch 180, icon-192, icon-512 (scale 0.72) and maskable-512 (0.56, safe zone) from `mark.svg`; `og.png` 1200×630 from `logo-full.png` cropped to content, palette-compressed |
+| `gen-brand.ts` | sharp. For every brand in `brands`, `squareIcon(svg, size, scale, bg)` renders into `brand/<key>/public`: favicon.svg + favicon-32 from `mark-small.svg`; apple-touch 180, icon-192, icon-512 (scale 0.72) and maskable-512 (0.56, safe zone) from `mark.svg`; `icons/mark.svg`; `og.png` 1200×630 from `logo-full.png` trimmed to what's drawn, palette-compressed |
 
 **`brand/`**
 
+One folder per brand, named by its key in `brands` (`site.config.ts`). The same four things in each:
+
 | File | Notes |
 |---|---|
-| `logo-full.png` | The owner's original: 1254×1254, mark + wordmark + tagline on white |
-| `mark.svg` | Vector redraw in original pixel coordinates (`viewBox="444 268 450 427"`): gradient `ps-fill` (`#099AFE`→`#1469F9`→`#4B3CEF`→`#6636F2`→`#6A30F4`), bookmark-shaped cutout (evenodd), fold shading `ps-fold` clipped to the P, three spark strokes `#0B94FD` width 25 |
-| `mark-p.svg` | The same without the sparks (`viewBox="434 268 376 427"`), used for the favicon |
+| `<key>/logo-full.png` | The owner's original: 1254×1254, mark + wordmark + tagline on white. Only the social image is made from it |
+| `<key>/mark.svg` | Claude's vector redraw of the mark, in the original's pixel coordinates, **in a square viewBox** centred on the mark (so pages and icons place any brand's mark the same way), transparent background |
+| `<key>/mark-small.svg` | The mark simplified for small sizes (browser tab, page headers), square viewBox |
+| `<key>/public/` | `favicon.svg`, `og.png`, `icons/*`: generated by `pnpm brand`, committed, served as the site's static files while the brand is active |
+
+- **The first brand's mark:** a P with a bookmark-shaped cutout (evenodd), gradient `ps-fill` (`#099AFE`→`#1469F9`→`#4B3CEF`→`#6636F2`→`#6A30F4`), fold shading `ps-fold` clipped to the P, three spark strokes `#0B94FD` width 25; the small one has no sparks.
+- **The second brand's mark (active since 2026-10-03):** a C holding a bookmark, with two cards peeking out behind it. The C is one path filled with the radial `ck-top` (cyan to blue), with two shaded areas clipped to it (`ck-body`, blue to purple, and `ck-arm`, the lower arm); the bookmark is `ck-bookmark` (pink to violet), the cards `ck-card-1` and `ck-card-2`. Shapes and colours were measured from the owner's PNG. The small one is the C and the bookmark without the cards, which blur under about 40 px.
 
 **`docs/`**: `SETUP.md` (accounts, tools, repos, Firebase projects, API-key restriction, secrets table) and `DOMAIN_CHANGE.md` (the domain-change runbook).
 
@@ -377,7 +385,9 @@ Workspace packages: root `post-saver-monorepo`, `@postsaver/config`, `@postsaver
 - **New third-party origin:** extend `mainSiteCsp()`, and the Worker CORS list if relevant.
 - **New page/route:** add `apps/web/<route>/index.html` + an entry in `build.rollupOptions.input`, and update robots/sitemap in `apps/web/vite.config.ts` if it's public.
 - **New shared package:** `packages/<name>` with `exports` pointing at `src/*.ts`, a tsconfig that extends the base, explicit `.ts` import extensions, and a `typecheck` script (the root `pnpm typecheck` runs `pnpm -r typecheck`).
-- **Generated files:** brand images are generated and committed (`pnpm brand`); `src/generated/` is generated at build and git-ignored.
+- **Switching the brand (name + logo):** change `activeBrand` in `site.config.ts`. Nothing else.
+- **New brand:** a block in `brands` (`name`, `accent`, `shortName` of 12 characters at most, `tagline`, `description`, `colors`), a folder `brand/<key>/` with the owner's `logo-full.png` and the redrawn `mark.svg` and `mark-small.svg` (square viewBoxes), then `pnpm brand` and commit what it writes. Pages never name a brand or assume its mark's shape.
+- **Generated files:** brand images are generated and committed (`pnpm brand`, into `brand/<key>/public/`); `src/generated/` is generated at build and git-ignored.
 
 ---
 
@@ -950,6 +960,7 @@ Hostinger's original parking records (A @ → 147.79.69.170 / 91.108.106.12, CNA
 9. [x] Android install + share target; bookmarklet; `/setup/` (Android + desktop); offline pages (2026-09-30; **the owner's test on the OnePlus Nord 5 is pending**)
 10. [x] Import (bookmarks, CSV, Dewey CSV, **Instagram export + reconcile**) + export + delete account (2026-09-30)
     - [x] **Extra (owner's request): saved text**, synced like a post, with a Copy button (§6.1) (2026-10-01; rules deployed by the owner, pushed as `0f1c430`, live; **the owner's test on the phone and the laptop is pending**)
+    - [x] **Extra (owner's request): the name and logo follow one line** (`activeBrand`), with the owner's new name and logo active while they decide (2026-10-03)
     - [ ] **Extra (owner's request): download a post's media from its link.** Not started: it conflicts with §2 and §6.8 and needs a decision first (§10 "Open question")
 11. [ ] PWA polish (vite-plugin-pwa, update prompt), accessibility, performance budgets, full landing, SEO
 12. [ ] Canary, backups, monitoring, `config/app` switches
@@ -994,6 +1005,11 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
 4. **Step 9 on the laptop:** `https://<domain>/setup/` → drag "Save to …" to the bookmarks bar → click it on a YouTube video.
 
 5. **Saved text (live since 2026-10-01), try it:** on the OnePlus open the library → **Add** → paste some text → **Save text**; it should appear on the laptop by itself, with a **Copy** button. Then the other way round. Also: select text in any app → Share → the brand. (If the phone still shows the old Add box, close the app and open it again: the installed app takes a new version when it's reopened.)
+
+6. **Decide on the name.** The new name and logo went in as the active brand on 2026-10-03, at the owner's wish, until they've thought it over. Claude's view, given when asked: nobody else uses the name and its `.com` was unregistered that day, but its second half reads as "online shop"; the mark is busy at small sizes (hence the small mark). Going back, or to another name, is one line (`activeBrand`, §4.5). **Only once the name is final**, in both Firebase projects:
+   - Google's sign-in window still shows the old name: Google Cloud console → Google Auth Platform → Branding → App name.
+   - So do the verification and password-reset emails: Firebase console → Project settings → General → Public-facing name.
+   - Buy the domain and do the domain change (below), name and domain in one go.
 
 **Open question (owner + Claude, before any building): downloading a post's media.** On 2026-10-01 the owner asked for a download option when a post's link is shared (also without saving it). That runs against decisions this file records: "no media is copied" and embeds only (§0, §2), "never download or re-host content; no scraping in v1" (§6.8), the platforms' terms (risk 9 in §7), and the $0 budget (the Worker's free plan can't fetch or relay video). Claude lays out what is and isn't possible, the owner decides, and only then is anything built.
 
@@ -1152,3 +1168,13 @@ Shareable read-only collections, a weekly "resurface" email (Cloudflare Cron + a
   - **About the browser tests on the owner's Mac:** on 2026-10-01 the Mac (8 GB of memory, a day of Chrome and VS Code open) ran short of memory as soon as a browser run started, and tests failed on their 5-second waits. Checked by running two failing import tests against the code from before this change: they failed the same way, so it was the machine, not the change. Running a suite at a time, with longer waits, works. CI on GitHub's runners is the full-suite check.
   - **Also asked for, not started:** downloading a post's media from its link. It conflicts with §2 and §6.8; see §10 "Open question".
   - The owner deployed the rules and indexes to both projects (2026-10-01 18:42 UTC); Claude verified that both live rulesets equal `firebase/firestore.rules` and that `saves.text` has no single-field index. Pushed as `0f1c430`; CI (check, rules, e2e) and Deploy (web, embed, resolver) green. **Live check** (headless Chrome with an Android user agent, signed out): `/app/` sends visitors to sign-in; `/share/?text=…` without a link shows "Sign in to save this" with the text previewed and clears the address bar; a share with a link still shows the post; the live scripts carry the new Add box; no console or CSP errors. A signed-in save on the live site is the owner's test (§10).
+- **2026-10-03:** the name and logo follow one line; the owner's new brand is switched on.
+  - **Why:** the app saves texts as well as posts now, so the owner wants a name that isn't about posts. They made a new logo, put it in `brand/`, and asked to be able to change the name and logo later "by only changing one line", with the new name in place for now: "till let me think".
+  - **How:** `site.config.ts` lists the brands (`brands`) and the one line `activeBrand` picks one. Each brand has a folder `brand/<key>/` with its logo sources and its ready-made `public/` (icons, social image); the web app serves the active one as Vite's `publicDir`, so a switch needs nothing regenerated and no image tools (§4.1). `check:domains` now refuses every brand's name, not only the active one. The part of the name drawn in the gradient is a field (`accent`), since a one-word name has no "last word".
+  - **The logo:** Claude redrew the mark from the owner's PNG as vectors, a full one and a small one (edges and colours measured from the image with sharp, the render compared with the original side by side). Every brand's marks now sit in a square viewBox; pages give them a square box and use the small mark under about 40 px (page headers, the setup guide), where the full one blurs.
+  - **Checked:** the line flipped to the first brand and back: page titles, the manifest, the colours and the icons followed both times. Seen with real eyes: the landing page light and dark, phone width, sign-in, the 404 page, the app icons and the social image of both brands.
+  - **Tests:** unchanged in number and all green on the owner's Mac: 932 core, 49 Worker, 147 web unit, 165 rules, 71 browser. No rules change, so nothing for the owner to deploy.
+  - **What the owner's devices show after the push:** the installed app takes the new name and icon by itself (Chrome rebuilds the app when the manifest changes, usually within a day); a "Save to …" bookmark dragged earlier keeps its old label until it's dragged again. Sign-ins and saves are untouched: same address, same accounts.
+  - **Left for when the name is final** (§10): the app name in Google's sign-in window, the name in Firebase's emails, the domain.
+  - `brand/Library.png`, the owner's sketch for another name, is left as it is: untracked, unused.
+  - **Not pushed yet:** built and verified locally; it goes live with the owner's go-ahead.

@@ -5,12 +5,14 @@ import { site, origins, hosts } from "./index.ts";
  * so HTML never contains a hardcoded brand or domain.
  */
 export function htmlTokens(): Record<string, string> {
-  // Split so pages can style the last word of the brand (e.g. a gradient).
-  const cut = site.brand.name.lastIndexOf(" ");
+  // Split so pages can style the end of the name like the logo does (a gradient). FIRST keeps
+  // its trailing space, if the name has one there, so the two are written with nothing between.
+  const { name, accent } = site.brand;
+  if (!name.endsWith(accent)) throw new Error(`The brand name "${name}" doesn't end with its accent "${accent}"`);
   return {
-    BRAND_NAME: site.brand.name,
-    BRAND_NAME_FIRST: cut > 0 ? site.brand.name.slice(0, cut) : site.brand.name,
-    BRAND_NAME_LAST: cut > 0 ? site.brand.name.slice(cut + 1) : "",
+    BRAND_NAME: name,
+    BRAND_NAME_FIRST: name.slice(0, name.length - accent.length),
+    BRAND_NAME_LAST: accent,
     BRAND_SHORT_NAME: site.brand.shortName,
     BRAND_TAGLINE: site.brand.tagline,
     BRAND_DESCRIPTION: site.brand.description,

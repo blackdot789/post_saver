@@ -5,7 +5,7 @@ import { site } from "@postsaver/config";
 export function BrandLink({ className }: { className?: string }) {
   return (
     <a href="/" className={className ?? "flex items-center gap-2.5 font-semibold"}>
-      <img src="/icons/mark.svg" alt="" width="36" height="34" className="h-8 w-auto" />
+      <img src="/favicon.svg" alt="" width="32" height="32" className="size-8" />
       <span className="text-lg tracking-tight">{site.brand.name}</span>
     </a>
   );

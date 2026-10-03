@@ -1,7 +1,7 @@
-import { site, type FirebaseWebConfig } from "../../../site.config.ts";
+import { site, brands, type Brand, type FirebaseWebConfig } from "../../../site.config.ts";
 
-export { site };
-export type { FirebaseWebConfig };
+export { site, brands };
+export type { Brand, FirebaseWebConfig };
 
 export type HostKey = "app" | keyof typeof site.subdomains;
 
@@ -42,7 +42,10 @@ export function firebaseConfig(env: FirebaseEnv) {
   };
 }
 
-/** Literal values that must never be hardcoded outside site.config.ts (used by check-domains). */
+/**
+ * Literal values that must never be hardcoded outside site.config.ts (used by check-domains):
+ * the domain, and the name of every brand, so that switching between them is always complete.
+ */
 export function forbiddenLiterals(): string[] {
-  return [site.domain, site.brand.name].filter((v) => v.length > 0);
+  return [site.domain, ...Object.values(brands).map((brand) => brand.name)].filter((v) => v.length > 0);
 }

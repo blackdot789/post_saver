@@ -17,8 +17,8 @@ nothing else in the repo hardcodes them (`pnpm check:domains` enforces this).
 
 | Path | What it is |
 |---|---|
-| `site.config.ts` | Domain, brand, contacts, URLs — the only place they're written |
-| `brand/` | Logo sources (`mark.svg`, `mark-p.svg`, `logo-full.png`) |
+| `site.config.ts` | Domain, brand, contacts, URLs — the only place they're written. One line (`activeBrand`) picks the name and logo |
+| `brand/` | One folder per brand: logo sources (`logo-full.png`, `mark.svg`, `mark-small.svg`) and the icons made from them (`public/`) |
 | `apps/web/` | Main site + app (Vite, React, Tailwind) → GitHub Pages of this repo |
 | `apps/embed/` | Embed sandbox → published to the `post_saver_embed` repo |
 | `packages/config/` | Typed access to the site config, HTML tokens, CSP, Vite plugin |
@@ -35,7 +35,7 @@ pnpm install
 pnpm dev             # main site at http://localhost:5173
 pnpm build           # production build of web + embed
 pnpm verify          # what CI runs: domain check, typecheck, build
-pnpm brand           # regenerate icons/OG image after changing brand/
+pnpm brand           # regenerate icons/OG image after changing a logo in brand/
 ```
 
 See [docs/SETUP.md](docs/SETUP.md) for accounts and infrastructure, and

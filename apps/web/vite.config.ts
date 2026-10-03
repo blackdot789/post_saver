@@ -69,6 +69,8 @@ export default defineConfig(({ mode }) => ({
     react(),
     tailwindcss(),
   ],
+  // The site's static files are the active brand's icons and social image (made by `pnpm brand`).
+  publicDir: here(`../../brand/${site.brand.key}/public`),
   build: {
     rollupOptions: {
       input: {
